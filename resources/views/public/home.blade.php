@@ -1,0 +1,33 @@
+<x-public-shell title="الرئيسية" description="برامج نوعية لحفظ القرآن الكريم وتجويده في بيئة تربوية متكاملة.">
+    <section class="relative isolate overflow-hidden bg-[linear-gradient(145deg,#f5fff9_0%,#e5f7ed_55%,#f9f5e9_100%)]">
+        <div class="absolute -right-32 -top-36 size-[30rem] rounded-full border-[70px] border-emerald-700/5"></div><div class="absolute -bottom-40 -left-24 size-96 rounded-full bg-amber-300/15 blur-3xl"></div>
+        <div class="relative mx-auto grid min-h-[680px] max-w-7xl items-center gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[1.05fr_.95fr] lg:px-8">
+            <div class="text-center lg:text-right">
+                <span class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white/70 px-4 py-2 text-xs font-black text-emerald-800 shadow-sm backdrop-blur"><span class="size-2 animate-pulse rounded-full bg-emerald-500"></span> رحلة إيمانية تبدأ بآية</span>
+                <h1 class="mt-7 text-4xl font-black leading-[1.35] tracking-tight text-emerald-950 sm:text-6xl">نبني جيلًا<br><span class="text-emerald-700">يحيا بالقرآن</span></h1>
+                <p class="mx-auto mt-6 max-w-xl text-base leading-8 text-slate-600 lg:mx-0 lg:text-lg">حفظٌ متقن، تلاوةٌ ندية، ورعايةٌ تربوية تواكب الطالب خطوةً بخطوة في رحلته مع كتاب الله.</p>
+                <div class="mt-8 flex flex-col justify-center gap-3 sm:flex-row lg:justify-start"><a href="{{ route('public.programs') }}" class="btn-primary px-7 py-3.5">اكتشف برامجنا <span>←</span></a><a href="{{ route('public.contact') }}" class="btn-secondary px-7 py-3.5">تواصل معنا</a></div>
+            </div>
+            <div class="relative mx-auto w-full max-w-lg">
+                <div class="absolute -inset-7 rounded-[3rem] border border-emerald-800/10"></div>
+                <div class="relative overflow-hidden rounded-[2.8rem] bg-emerald-900 p-7 text-white shadow-[0_40px_100px_-35px_rgba(6,78,59,.65)] sm:p-10">
+                    <div class="absolute inset-0 opacity-15" style="background-image:radial-gradient(circle,#fff 1.2px,transparent 1.5px);background-size:25px 25px"></div>
+                    <div class="relative"><p class="text-sm font-bold text-emerald-200">قال الله تعالى</p><p class="mt-7 text-center text-3xl font-black leading-[2] sm:text-4xl">﴿ وَرَتِّلِ الْقُرْآنَ تَرْتِيلًا ﴾</p><div class="mx-auto mt-8 h-px w-24 bg-emerald-300/40"></div><p class="mt-5 text-center text-xs text-emerald-100/60">رحلة تعليمية مبنية على المتابعة والإتقان</p></div>
+                </div>
+                <div class="absolute -bottom-7 -right-5 rounded-2xl bg-white px-5 py-4 shadow-xl"><p class="text-2xl font-black text-emerald-800">{{ $stats['students'] }}+</p><p class="text-xs font-bold text-slate-400">طالبًا نشطًا</p></div>
+            </div>
+        </div>
+    </section>
+
+    @if($announcements->isNotEmpty())<section class="mx-auto -mt-5 max-w-7xl px-4 sm:px-6 lg:px-8"><div class="relative z-10 flex flex-col gap-3 rounded-3xl border border-amber-200/60 bg-amber-50 px-5 py-4 shadow-lg shadow-amber-900/5 sm:flex-row sm:items-center"><span class="shrink-0 rounded-full bg-amber-500 px-3 py-1 text-xs font-black text-white">إعلان</span><div class="min-w-0 flex-1 overflow-hidden"><p class="truncate text-sm font-black text-amber-950">{{ $announcements->first()->title }}</p><p class="truncate text-xs text-amber-800/65">{{ $announcements->first()->excerpt }}</p></div></div></section>@endif
+
+    <section class="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">@foreach([['students','الطلاب','طالب في رحلة الحفظ'],['halaqas','الحلقات','حلقة تعليمية نشطة'],['programs','البرامج','برنامج ودورة نوعية'],['achievements','الإنجازات','محطة نجاح موثقة']] as [$key,$label,$caption])<div class="stat-card panel-interactive"><span class="grid size-13 place-items-center rounded-2xl bg-emerald-100 text-2xl font-black text-emerald-800">{{ $stats[$key] }}</span><span><span class="block font-black text-emerald-950">{{ $label }}</span><span class="text-xs text-slate-400">{{ $caption }}</span></span></div>@endforeach</div>
+    </section>
+
+    <section class="bg-emerald-950 py-24 text-white"><div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"><div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p class="text-xs font-black tracking-widest text-emerald-300">مسارات تعليمية متكاملة</p><h2 class="mt-3 text-3xl font-black sm:text-4xl">برامج تنمو مع الطالب</h2></div><a href="{{ route('public.programs') }}" class="text-sm font-black text-emerald-300">عرض كل البرامج ←</a></div><div class="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-4">@forelse($programs as $program)<article class="rounded-3xl border border-white/10 bg-white/7 p-6 transition duration-300 hover:-translate-y-2 hover:bg-white/12"><span class="grid size-11 place-items-center rounded-2xl bg-emerald-300/15 text-xl">✦</span><h3 class="mt-5 text-lg font-black">{{ $program->name }}</h3><p class="mt-2 line-clamp-3 text-sm leading-7 text-emerald-100/60">{{ $program->description ?: 'برنامج تعليمي نوعي مصمم بعناية.' }}</p><p class="mt-5 text-xs font-bold text-emerald-300">{{ $program->hours }} ساعة تعليمية</p></article>@empty<p class="text-emerald-100/60">ستعلن البرامج الجديدة قريبًا.</p>@endforelse</div></div></section>
+
+    @if($news->isNotEmpty())<section class="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8"><div class="mb-10 flex items-end justify-between"><div><p class="eyebrow">من قلب المركز</p><h2 class="text-3xl font-black text-emerald-950">آخر الأخبار</h2></div><a href="{{ route('news.index') }}" class="hidden text-sm font-black text-emerald-700 sm:block">كل الأخبار ←</a></div><div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">@foreach($news as $item)<x-public-content-card :item="$item" route-name="news.show" />@endforeach</div></section>@endif
+
+    <section class="mx-auto max-w-7xl px-4 pb-10 sm:px-6 lg:px-8"><div class="relative overflow-hidden rounded-[2.8rem] bg-[linear-gradient(120deg,#0b513e,#087552)] px-6 py-14 text-center text-white shadow-2xl shadow-emerald-900/15 sm:px-12"><div class="absolute inset-0 opacity-10" style="background-image:radial-gradient(circle,#fff 1px,transparent 1px);background-size:24px 24px"></div><div class="relative"><p class="text-sm font-bold text-emerald-200">باب الخير مفتوح</p><h2 class="mt-3 text-3xl font-black sm:text-4xl">ابدأ رحلتك مع القرآن اليوم</h2><p class="mx-auto mt-4 max-w-xl text-sm leading-7 text-emerald-100/70">تواصل معنا للتعرّف على البرنامج الأنسب والالتحاق بإحدى حلقات المركز.</p><a href="{{ route('public.contact') }}" class="mt-7 inline-flex rounded-xl bg-white px-7 py-3 font-black text-emerald-900 shadow-lg">تواصل معنا</a></div></div></section>
+</x-public-shell>

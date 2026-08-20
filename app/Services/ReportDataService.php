@@ -1,0 +1,184 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Attendance;
+use App\Models\Certificate;
+use App\Models\Course;
+use App\Models\DailyRecord;
+use App\Models\Halaqa;
+use App\Models\RecitationItem;
+use App\Models\Student;
+use App\Models\StudentAlert;
+use App\Models\StudentProgressSnapshot;
+use App\Models\TeacherProfile;
+use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
+
+class ReportDataService
+{
+    public function __construct(private readonly StudentVisibilityService $visibility) {}
+
+    public function types(): array
+    {
+        return [
+            'students' => 'تقرير الطلاب', 'halaqas' => 'تقرير الحلقات', 'teachers' => 'تقرير المحفّظين',
+            'attendance' => 'تقرير الحضور', 'memorization' => 'تقرير الحفظ', 'revision' => 'تقرير المراجعة',
+            'evaluation' => 'تقرير التقييم', 'alerts' => 'تقرير التنبيهات', 'courses' => 'تقرير الدورات',
+            'certificates' => 'تقرير الشهادات', 'management_summary' => 'الملخص الإداري',
+        ];
+    }
+
+    /** @return array{title:string, headings:array, rows:array, sheets?:array} */
+    public function build(string $type, array $filters, User $user): array
+    {
+        abort_unless(array_key_exists($type, $this->types()), 422);
+        $studentIds = $this->visibleStudentIds($user, $filters);
+
+        if ($type === 'management_summary') {
+            return $this->managementSummary($filters, $user, $studentIds);
+        }
+
+        [$headings, $rows] = match ($type) {
+            'students' => $this->students($studentIds),
+            'halaqas' => $this->halaqas($studentIds, $filters),
+            'teachers' => $this->teachers($studentIds, $filters),
+            'attendance' => $this->attendance($studentIds, $filters),
+            'memorization' => $this->memorization($studentIds),
+            'revision' => $this->revision($studentIds, $filters),
+            'evaluation' => $this->evaluation($studentIds, $filters),
+            'alerts' => $this->alerts($studentIds, $filters),
+            'courses' => $this->courses($studentIds, $filters),
+            'certificates' => $this->certificates($studentIds, $filters),
+        };
+
+        return ['title' => $this->types()[$type], 'headings' => $headings, 'rows' => $rows];
+    }
+
+    private function visibleStudentIds(User $user, array $filters): array
+    {
+        $query = $user->hasRole('report-viewer') && $user->can('reports.view')
+            ? Student::query()
+            : $this->visibility->queryFor($user);
+
+        return $query
+            ->when($filters['halaqa_id'] ?? null, fn (Builder $query, $id) => $query->where('current_halaqa_id', $id))
+            ->when($filters['student_id'] ?? null, fn (Builder $query, $id) => $query->whereKey($id))
+            ->pluck('id')->all();
+    }
+
+    private function students(array $ids): array
+    {
+        $rows = $this->visibilityRows($ids)->map(fn ($student) => [$student->student_number, $student->full_name, $student->currentHalaqa?->name ?: '—', $student->status->label(), $student->registration_date?->format('Y-m-d')])->all();
+
+        return [['رقم الطالب', 'اسم الطالب', 'الحلقة', 'الحالة', 'تاريخ التسجيل'], $rows];
+    }
+
+    private function halaqas(array $studentIds, array $filters): array
+    {
+        $rows = Halaqa::query()->with(['branch:id,name', 'primaryTeacher.user:id,name'])->withCount(['currentStudents' => fn (Builder $query) => $query->whereIn('id', $studentIds)])
+            ->when($filters['halaqa_id'] ?? null, fn (Builder $query, $id) => $query->whereKey($id))
+            ->whereHas('currentStudents', fn (Builder $query) => $query->whereIn('id', $studentIds))->orderBy('name')->get()
+            ->map(fn (Halaqa $halaqa) => [$halaqa->code, $halaqa->name, $halaqa->branch?->name ?: '—', $halaqa->primaryTeacher?->user?->name ?: '—', $halaqa->current_students_count, $halaqa->capacity])->all();
+
+        return [['الرمز', 'الحلقة', 'الفرع', 'المحفّظ', 'عدد الطلاب', 'السعة'], $rows];
+    }
+
+    private function teachers(array $studentIds, array $filters): array
+    {
+        $rows = TeacherProfile::query()->with(['user:id,name', 'branch:id,name'])->withCount(['dailyRecords' => fn (Builder $query) => $this->dateFilter($query->whereIn('student_id', $studentIds), $filters, 'record_date')])
+            ->whereHas('dailyRecords', fn (Builder $query) => $query->whereIn('student_id', $studentIds))->get()
+            ->map(fn (TeacherProfile $teacher) => [$teacher->employee_number, $teacher->user->name, $teacher->branch?->name ?: '—', $teacher->specialization ?: '—', $teacher->daily_records_count])->all();
+
+        return [['الرقم الوظيفي', 'اسم المحفّظ', 'الفرع', 'التخصص', 'السجلات خلال الفترة'], $rows];
+    }
+
+    private function attendance(array $studentIds, array $filters): array
+    {
+        $query = Attendance::query()->with(['student:id,student_number,full_name', 'halaqa:id,name'])->whereIn('student_id', $studentIds);
+        $rows = $this->dateFilter($query, $filters, 'record_date')->latest('record_date')->get()->map(fn (Attendance $attendance) => [$attendance->record_date->format('Y-m-d'), $attendance->student->student_number, $attendance->student->full_name, $attendance->halaqa->name, $attendance->status->label(), $attendance->notes ?: '—'])->all();
+
+        return [['التاريخ', 'رقم الطالب', 'اسم الطالب', 'الحلقة', 'الحالة', 'ملاحظات'], $rows];
+    }
+
+    private function memorization(array $studentIds): array
+    {
+        $latestIds = StudentProgressSnapshot::query()->whereIn('student_id', $studentIds)->selectRaw('MAX(id)')->groupBy('student_id');
+        $rows = StudentProgressSnapshot::query()->with('student:id,student_number,full_name')->whereIn('id', $latestIds)->get()->map(fn ($snapshot) => [$snapshot->student->student_number, $snapshot->student->full_name, $snapshot->as_of_date->format('Y-m-d'), $snapshot->memorized_ayahs, $snapshot->memorized_percentage.'%', $snapshot->completed_juz, $snapshot->score])->all();
+
+        return [['رقم الطالب', 'اسم الطالب', 'حتى تاريخ', 'الآيات المحفوظة', 'نسبة الحفظ', 'الأجزاء', 'مؤشر الأداء'], $rows];
+    }
+
+    private function revision(array $studentIds, array $filters): array
+    {
+        $query = RecitationItem::query()->with(['dailyRecord.student:id,student_number,full_name'])->whereIn('type', ['recent_revision', 'old_revision'])->whereHas('dailyRecord', fn (Builder $query) => $query->whereIn('student_id', $studentIds));
+        $query->whereHas('dailyRecord', fn (Builder $query) => $this->dateFilter($query, $filters, 'record_date'));
+        $rows = $query->latest()->get()->map(fn (RecitationItem $item) => [$item->dailyRecord->record_date->format('Y-m-d'), $item->dailyRecord->student->student_number, $item->dailyRecord->student->full_name, $item->start_ayah_id, $item->end_ayah_id, $item->evaluation->label(), $item->memorization_errors + $item->tajweed_errors])->all();
+
+        return [['التاريخ', 'رقم الطالب', 'اسم الطالب', 'من آية', 'إلى آية', 'التقييم', 'الأخطاء'], $rows];
+    }
+
+    private function evaluation(array $studentIds, array $filters): array
+    {
+        $query = DailyRecord::query()->with(['student:id,student_number,full_name', 'teacher.user:id,name'])->whereIn('student_id', $studentIds);
+        $rows = $this->dateFilter($query, $filters, 'record_date')->latest('record_date')->get()->map(fn (DailyRecord $record) => [$record->record_date->format('Y-m-d'), $record->student->student_number, $record->student->full_name, $record->teacher->user->name, $record->general_evaluation?->label() ?: '—', $record->notes ?: '—'])->all();
+
+        return [['التاريخ', 'رقم الطالب', 'اسم الطالب', 'المحفّظ', 'التقييم العام', 'ملاحظات'], $rows];
+    }
+
+    private function alerts(array $studentIds, array $filters): array
+    {
+        $query = StudentAlert::query()->with('student:id,student_number,full_name')->whereIn('student_id', $studentIds);
+        $rows = $this->dateFilter($query, $filters, 'generated_at')->latest('generated_at')->get()->map(fn (StudentAlert $alert) => [$alert->generated_at->format('Y-m-d'), $alert->student->student_number, $alert->student->full_name, $alert->type, $alert->severity->label(), $alert->status->label(), $alert->reason])->all();
+
+        return [['التاريخ', 'رقم الطالب', 'اسم الطالب', 'النوع', 'الخطورة', 'الحالة', 'السبب'], $rows];
+    }
+
+    private function courses(array $studentIds, array $filters): array
+    {
+        $rows = Course::query()->with(['branch:id,name', 'instructor.user:id,name'])->withCount(['enrollments' => fn (Builder $query) => $query->whereIn('student_id', $studentIds)])
+            ->whereHas('enrollments', fn (Builder $query) => $query->whereIn('student_id', $studentIds))
+            ->when($filters['date_from'] ?? null, fn (Builder $query, $date) => $query->whereDate('starts_at', '>=', $date))
+            ->when($filters['date_to'] ?? null, fn (Builder $query, $date) => $query->whereDate('starts_at', '<=', $date))->get()
+            ->map(fn (Course $course) => [$course->name, $course->branch?->name ?: '—', $course->instructor?->user?->name ?: '—', $course->starts_at->format('Y-m-d'), $course->ends_at?->format('Y-m-d') ?: '—', $course->status->label(), $course->enrollments_count])->all();
+
+        return [['الدورة', 'الفرع', 'المدرّب', 'البداية', 'النهاية', 'الحالة', 'المسجلون'], $rows];
+    }
+
+    private function certificates(array $studentIds, array $filters): array
+    {
+        $query = Certificate::query()->with(['student:id,student_number,full_name', 'course:id,name'])->whereIn('student_id', $studentIds);
+        $rows = $this->dateFilter($query, $filters, 'issued_at')->latest('issued_at')->get()->map(fn (Certificate $certificate) => [$certificate->certificate_number ?: '—', $certificate->student->student_number, $certificate->student->full_name, $certificate->name, $certificate->course?->name ?: '—', $certificate->issuer, $certificate->issued_at->format('Y-m-d'), $certificate->grade ?: '—'])->all();
+
+        return [['رقم الشهادة', 'رقم الطالب', 'اسم الطالب', 'الشهادة', 'الدورة', 'الجهة', 'تاريخ الإصدار', 'التقدير'], $rows];
+    }
+
+    private function managementSummary(array $filters, User $user, array $studentIds): array
+    {
+        $attendance = $this->attendance($studentIds, $filters);
+        $students = $this->students($studentIds);
+        $halaqas = $this->halaqas($studentIds, $filters);
+        $openAlerts = StudentAlert::query()->whereIn('student_id', $studentIds)->where('status', 'open')->count();
+        $present = collect($attendance[1])->where(4, 'حاضر')->count();
+        $rate = count($attendance[1]) ? round(($present / count($attendance[1])) * 100, 1).'%' : '0%';
+        $summary = [['المؤشر', 'القيمة'], [['الطلاب الظاهرون', count($studentIds)], ['الحلقات', count($halaqas[1])], ['سجلات الحضور', count($attendance[1])], ['نسبة الحضور', $rate], ['التنبيهات المفتوحة', $openAlerts]]];
+
+        return ['title' => $this->types()['management_summary'], 'headings' => $summary[0], 'rows' => $summary[1], 'sheets' => [
+            ['title' => 'الملخص', 'headings' => $summary[0], 'rows' => $summary[1]],
+            ['title' => 'الطلاب', 'headings' => $students[0], 'rows' => $students[1]],
+            ['title' => 'الحلقات', 'headings' => $halaqas[0], 'rows' => $halaqas[1]],
+            ['title' => 'الحضور', 'headings' => $attendance[0], 'rows' => $attendance[1]],
+        ]];
+    }
+
+    private function visibilityRows(array $ids)
+    {
+        return Student::query()->with('currentHalaqa:id,name')->whereIn('id', $ids)->orderBy('full_name')->get();
+    }
+
+    private function dateFilter(Builder $query, array $filters, string $column): Builder
+    {
+        return $query->when($filters['date_from'] ?? null, fn (Builder $query, $date) => $query->whereDate($column, '>=', $date))
+            ->when($filters['date_to'] ?? null, fn (Builder $query, $date) => $query->whereDate($column, '<=', $date));
+    }
+}
