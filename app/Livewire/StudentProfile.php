@@ -3,16 +3,20 @@
 namespace App\Livewire;
 
 use App\Actions\Guardians\CreateGuardianAction;
+use App\Actions\Guardians\UpdateGuardianAction;
 use App\Actions\Students\EnrollStudentInHalaqaAction;
 use App\Actions\Students\RecordInitialBaselineAction;
 use App\Actions\Students\UpdateStudentAction;
 use App\Enums\StudentStatus;
+use App\Models\Guardian;
 use App\Models\Halaqa;
 use App\Models\QuranAyah;
 use App\Models\QuranSurah;
 use App\Models\Student;
+use App\Services\MemorizationJourneyService;
 use App\Services\PrivateFileService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -40,11 +44,17 @@ class StudentProfile extends Component
 
     public string $profileContactPhone = '';
 
+    public string $profileSponsorshipType = '';
+
+    public string $profileSponsorshipOrganization = '';
+
     public string $profileStatus = 'active';
 
     public string $profileNotes = '';
 
     public $profilePhoto;
+
+    public bool $removeProfilePhoto = false;
 
     public $profileIdentityDocument;
 
@@ -67,6 +77,8 @@ class StudentProfile extends Component
     public string $guardianNotes = '';
 
     public $guardianIdentityDocument;
+
+    public ?int $editingGuardianId = null;
 
     public string $baselineStartSurahId = '';
 
@@ -97,6 +109,8 @@ class StudentProfile extends Component
         $this->profileIdentityNumber = $student->identity_number ?? '';
         $this->profileBirthDate = $student->birth_date?->toDateString() ?? '';
         $this->profileContactPhone = $student->contact_phone ?? '';
+        $this->profileSponsorshipType = $student->sponsorship_type ?? '';
+        $this->profileSponsorshipOrganization = $student->sponsorship_organization ?? '';
         $this->profileStatus = $student->status->value;
         $this->profileNotes = $student->notes ?? '';
         $this->baselineRecordedAt = today()->toDateString();
@@ -112,6 +126,19 @@ class StudentProfile extends Component
             'baselineStartSurahId', 'baselineStartAyahNumber',
             'baselineEndSurahId', 'baselineEndAyahNumber',
         ]);
+    }
+
+    public function updatedProfilePhoto(): void
+    {
+        $this->removeProfilePhoto = false;
+        $this->resetValidation('profilePhoto');
+    }
+
+    public function removeProfilePhotoSelection(): void
+    {
+        $this->reset('profilePhoto');
+        $this->removeProfilePhoto = true;
+        $this->resetValidation('profilePhoto');
     }
 
     public function updatedBaselineEndSurahId(string $surahId): void
@@ -143,6 +170,9 @@ class StudentProfile extends Component
     {
         $student = $this->student();
         Gate::authorize('update', $student);
+        $student->load(['photo', 'identityDocument']);
+        $oldPhoto = $student->photo;
+        $oldIdentityDocument = $student->identityDocument;
 
         $data = $this->validate([
             'profileFirstName' => ['required', 'string', 'max:100'],
@@ -152,9 +182,12 @@ class StudentProfile extends Component
             'profileIdentityNumber' => ['nullable', 'string', 'max:50', Rule::unique('students', 'identity_number')->ignore($student->id)],
             'profileBirthDate' => ['nullable', 'date', 'before:today'],
             'profileContactPhone' => ['nullable', 'string', 'max:30'],
+            'profileSponsorshipType' => ['nullable', 'string', 'max:255'],
+            'profileSponsorshipOrganization' => ['nullable', 'string', 'max:255'],
             'profileStatus' => ['required', Rule::enum(StudentStatus::class)],
             'profileNotes' => ['nullable', 'string', 'max:3000'],
-            'profilePhoto' => ['nullable', 'image', 'max:2048'],
+            'profilePhoto' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:3072'],
+            'removeProfilePhoto' => ['boolean'],
             'profileIdentityDocument' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
         ]);
 
@@ -166,31 +199,76 @@ class StudentProfile extends Component
             'identity_number' => $data['profileIdentityNumber'] ?: null,
             'birth_date' => $data['profileBirthDate'] ?: null,
             'contact_phone' => $data['profileContactPhone'] ?: null,
+            'sponsorship_type' => $data['profileSponsorshipType'] ?: null,
+            'sponsorship_organization' => $data['profileSponsorshipOrganization'] ?: null,
             'status' => $data['profileStatus'],
             'notes' => $data['profileNotes'] ?: null,
         ];
         if ($this->profilePhoto) {
             $updates['photo_private_file_id'] = $privateFiles
                 ->store($this->profilePhoto, $student, auth()->user(), "students/{$student->id}", 'student-photo')->id;
+        } elseif ($data['removeProfilePhoto']) {
+            $updates['photo_private_file_id'] = null;
         }
         if ($this->profileIdentityDocument) {
             $updates['identity_private_file_id'] = $privateFiles
                 ->store($this->profileIdentityDocument, $student, auth()->user(), "students/{$student->id}", 'student-identity')->id;
         }
-        $updateStudent->execute($student, $updates, auth()->user());
+        $updatedStudent = $updateStudent->execute($student, $updates, auth()->user());
 
-        $this->reset('profilePhoto', 'profileIdentityDocument');
+        if ($oldPhoto && $oldPhoto->id !== $updatedStudent->photo_private_file_id) {
+            $privateFiles->delete($oldPhoto);
+        }
+        if ($oldIdentityDocument && $oldIdentityDocument->id !== $updatedStudent->identity_private_file_id) {
+            $privateFiles->delete($oldIdentityDocument);
+        }
+
+        $this->reset('profilePhoto', 'profileIdentityDocument', 'removeProfilePhoto');
         session()->flash('success', 'تم تحديث بيانات الطالب.');
     }
 
-    public function saveGuardian(CreateGuardianAction $createGuardian, PrivateFileService $privateFiles): void
+    public function editGuardian(int $guardianId): void
     {
         $student = $this->student();
         Gate::authorize('update', $student);
+        $guardian = $student->guardians()->whereKey($guardianId)->firstOrFail();
+
+        $this->editingGuardianId = $guardian->id;
+        $this->guardianName = $guardian->full_name;
+        $this->guardianIdentityNumber = $guardian->identity_number ?? '';
+        $this->guardianPhone = $guardian->phone;
+        $this->guardianAlternativePhone = $guardian->alternative_phone ?? '';
+        $this->guardianEmail = $guardian->email ?? '';
+        $this->guardianRelationship = $guardian->pivot->relationship;
+        $this->guardianIsPrimary = (bool) $guardian->pivot->is_primary;
+        $this->guardianCanReceiveNotifications = (bool) $guardian->pivot->can_receive_notifications;
+        $this->guardianNotes = $guardian->notes ?? '';
+        $this->reset('guardianIdentityDocument');
+        $this->resetValidation();
+        $this->dispatch('guardian-editor-opened');
+    }
+
+    public function cancelGuardianEditing(): void
+    {
+        $this->resetGuardianForm();
+    }
+
+    public function saveGuardian(
+        CreateGuardianAction $createGuardian,
+        UpdateGuardianAction $updateGuardian,
+        PrivateFileService $privateFiles,
+    ): void {
+        $student = $this->student();
+        Gate::authorize('update', $student);
+
+        $identityRules = ['nullable', 'string', 'max:50'];
+        if ($this->editingGuardianId) {
+            $identityRules[] = Rule::unique('guardians', 'identity_number')->ignore($this->editingGuardianId);
+        }
 
         $data = $this->validate([
             'guardianName' => ['required', 'string', 'max:255'],
-            'guardianIdentityNumber' => ['nullable', 'string', 'max:50'],
+            'guardianIdentityNumber' => $identityRules,
             'guardianPhone' => ['required', 'string', 'max:30'],
             'guardianAlternativePhone' => ['nullable', 'string', 'max:30'],
             'guardianEmail' => ['nullable', 'email', 'max:255'],
@@ -201,7 +279,7 @@ class StudentProfile extends Component
             'guardianIdentityDocument' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
         ]);
 
-        $guardian = $createGuardian->execute($student, [
+        $guardianData = [
             'full_name' => $data['guardianName'],
             'identity_number' => $data['guardianIdentityNumber'] ?: null,
             'phone' => $data['guardianPhone'],
@@ -211,9 +289,20 @@ class StudentProfile extends Component
             'is_primary' => $data['guardianIsPrimary'],
             'can_receive_notifications' => $data['guardianCanReceiveNotifications'],
             'notes' => $data['guardianNotes'] ?: null,
-        ], auth()->user());
+        ];
+        $wasEditing = (bool) $this->editingGuardianId;
+        $guardian = $wasEditing
+            ? $updateGuardian->execute(
+                $student,
+                Guardian::query()->findOrFail($this->editingGuardianId),
+                $guardianData,
+                auth()->user(),
+            )
+            : $createGuardian->execute($student, $guardianData, auth()->user());
 
         if ($this->guardianIdentityDocument) {
+            $guardian->load('identityDocument');
+            $oldIdentityDocument = $guardian->identityDocument;
             $file = $privateFiles->store(
                 $this->guardianIdentityDocument,
                 $guardian,
@@ -222,10 +311,13 @@ class StudentProfile extends Component
                 'guardian-identity',
             );
             $guardian->update(['identity_private_file_id' => $file->id, 'updated_by' => auth()->id()]);
+            if ($oldIdentityDocument && $oldIdentityDocument->id !== $file->id) {
+                $privateFiles->delete($oldIdentityDocument);
+            }
         }
 
         $this->resetGuardianForm();
-        session()->flash('success', 'تم ربط ولي الأمر بالطالب.');
+        session()->flash('success', $wasEditing ? 'تم تحديث بيانات ولي الأمر.' : 'تم حفظ بيانات ولي الأمر وربطها بالطالب.');
     }
 
     public function saveBaseline(RecordInitialBaselineAction $recordBaseline): void
@@ -261,6 +353,13 @@ class StudentProfile extends Component
             'enrollmentStartsAt' => ['required', 'date'],
             'enrollmentReason' => ['nullable', 'string', 'max:255'],
         ]);
+
+        if (! $this->availableHalaqas()->whereKey($data['enrollmentHalaqaId'])->exists()) {
+            throw ValidationException::withMessages([
+                'enrollmentHalaqaId' => 'يمكنك اختيار حلقة مسندة إليك حاليًا فقط.',
+            ]);
+        }
+
         $enrollStudent->execute(
             $student,
             Halaqa::query()->findOrFail($data['enrollmentHalaqaId']),
@@ -312,8 +411,11 @@ class StudentProfile extends Component
             'timeline' => $timeline,
             'dailyRecords' => $dailyRecords,
             'surahs' => QuranSurah::query()->orderBy('id')->get(['id', 'name_arabic', 'verses_count']),
-            'halaqas' => Halaqa::query()->where('active', true)->orderBy('name')->get(['id', 'name']),
+            'halaqas' => $this->availableHalaqas()->orderBy('name')->get(['id', 'name']),
             'studentStatuses' => StudentStatus::cases(),
+            'memorizationJourney' => auth()->user()->can('recitations.view')
+                ? app(MemorizationJourneyService::class)->calculate($student)
+                : null,
         ]);
     }
 
@@ -332,11 +434,32 @@ class StudentProfile extends Component
         return $ayah;
     }
 
+    /** @return Builder<Halaqa> */
+    private function availableHalaqas(): Builder
+    {
+        $query = Halaqa::query()->where('active', true);
+        $user = auth()->user();
+
+        if (! $user->requiresTeacherAssignmentScope()) {
+            return $query;
+        }
+
+        $teacherId = $user->teacherProfile?->id;
+        if (! $teacherId) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->whereHas('teacherAssignments', fn (Builder $assignments) => $assignments
+            ->where('teacher_profile_id', $teacherId)
+            ->whereDate('starts_at', '<=', today())
+            ->where(fn (Builder $dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', today())));
+    }
+
     private function resetGuardianForm(): void
     {
         $this->reset(
             'guardianName', 'guardianIdentityNumber', 'guardianPhone', 'guardianAlternativePhone',
-            'guardianEmail', 'guardianNotes', 'guardianIdentityDocument',
+            'guardianEmail', 'guardianNotes', 'guardianIdentityDocument', 'editingGuardianId',
         );
         $this->guardianRelationship = 'father';
         $this->guardianIsPrimary = true;

@@ -12,7 +12,7 @@ class EnsureUserIsActive
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if ($request->user() && ! $request->user()->active) {
+        if ($request->user() && (! $request->user()->active || $request->user()->archived_at)) {
             if ($request->expectsJson()) {
                 $accessToken = $request->user()->currentAccessToken();
                 if ($accessToken instanceof PersonalAccessToken) {

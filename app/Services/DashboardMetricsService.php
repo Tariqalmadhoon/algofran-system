@@ -39,12 +39,22 @@ class DashboardMetricsService
             ->whereDate('record_date', '>=', $from)
             ->whereDate('record_date', '<=', $to));
 
+        $attendanceCounts = (clone $attendance)
+            ->selectRaw('status, COUNT(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status');
+        $present = (int) ($attendanceCounts['present'] ?? 0);
+        $late = (int) ($attendanceCounts['late'] ?? 0);
+        $absent = (int) ($attendanceCounts['absent'] ?? 0);
+        $excused = (int) ($attendanceCounts['excused'] ?? 0);
+        $attendanceDenominator = $present + $late + $absent;
+
         $activeAlerts = $user->can('alerts.view')
             ? StudentAlert::query()->whereIn('student_id', clone $studentIds)->whereIn('status', ['open', 'acknowledged'])
             : StudentAlert::query()->whereRaw('1 = 0');
         $trendRows = $this->trendRows($studentIds, $to);
 
-        $visibleStudents = (clone $students)->with(['latestProgress.lastMemorizedAyah.surah', 'currentHalaqa:id,name'])->get();
+        $visibleStudents = (clone $students)->with(['latestProgress.lastMemorizedAyah.surah', 'currentHalaqa:id,name', 'photo:id'])->get();
         $levels = ['excellent' => 0, 'good' => 0, 'needs_support' => 0, 'critical' => 0, 'no_data' => 0];
         foreach ($visibleStudents as $student) {
             $score = $student->latestProgress?->score;
@@ -57,6 +67,8 @@ class DashboardMetricsService
             };
             $levels[$level]++;
         }
+        $studentsWithProgress = $visibleStudents->filter(fn (Student $student) => $student->latestProgress !== null);
+        $averageStudentScore = round((float) ($studentsWithProgress->avg(fn (Student $student) => $student->latestProgress->score) ?? 0), 2);
 
         return [
             'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
@@ -64,13 +76,31 @@ class DashboardMetricsService
                 'active_students' => (clone $students)->where('status', 'active')->count(),
                 'teachers' => $this->teacherCount($user, $filters),
                 'halaqas' => $this->halaqaCount($user, $filters),
-                'present' => (clone $attendance)->whereIn('status', ['present', 'late'])->count(),
-                'absent' => (clone $attendance)->where('status', 'absent')->count(),
+                'present' => $present + $late,
+                'absent' => $absent,
                 'daily_records' => (clone $records)->count(),
                 'new_memorization' => (clone $items)->where('type', 'new_memorization')->count(),
                 'revisions' => (clone $items)->whereIn('type', ['recent_revision', 'old_revision'])->count(),
                 'open_alerts' => (clone $activeAlerts)->count(),
                 'needs_followup' => (clone $activeAlerts)->distinct()->count('student_id'),
+            ],
+            'attendance' => [
+                'present' => $present,
+                'late' => $late,
+                'absent' => $absent,
+                'excused' => $excused,
+                'total' => $present + $late + $absent + $excused,
+                'rate' => $attendanceDenominator > 0
+                    ? round((($present + $late) / $attendanceDenominator) * 100, 2)
+                    : 0,
+            ],
+            'coverage' => [
+                'students_with_progress' => $studentsWithProgress->count(),
+                'students_without_progress' => $visibleStudents->count() - $studentsWithProgress->count(),
+                'rate' => $visibleStudents->isNotEmpty()
+                    ? round(($studentsWithProgress->count() / $visibleStudents->count()) * 100, 2)
+                    : 0,
+                'average_student_score' => $averageStudentScore,
             ],
             'evaluation_average' => $this->averageEvaluation((clone $items)->pluck('evaluation')),
             'trend' => $this->weeklyTrend($trendRows, $to),
@@ -78,7 +108,7 @@ class DashboardMetricsService
             'levels' => $levels,
             'halaqa_performance' => $this->halaqaPerformance($studentIds, $from, $to),
             'students' => $visibleStudents->sortBy(fn (Student $student) => $student->latestProgress?->score ?? -1)->take(8)->values(),
-            'alerts' => (clone $activeAlerts)->with(['student:id,full_name', 'halaqa:id,name'])->orderByRaw("CASE severity WHEN 'critical' THEN 1 WHEN 'warning' THEN 2 ELSE 3 END")->latest('generated_at')->limit(8)->get(),
+            'alerts' => (clone $activeAlerts)->with(['student:id,full_name,first_name,family_name,photo_private_file_id', 'student.photo:id', 'halaqa:id,name'])->orderByRaw("CASE severity WHEN 'critical' THEN 1 WHEN 'warning' THEN 2 ELSE 3 END")->latest('generated_at')->limit(8)->get(),
             'teacher_today' => $this->teacherToday($user),
         ];
     }
@@ -169,7 +199,7 @@ class DashboardMetricsService
 
     private function teacherCount(User $user, array $filters): int
     {
-        if ($user->hasRole('teacher')) {
+        if ($user->requiresTeacherAssignmentScope()) {
             return $user->teacherProfile?->active ? 1 : 0;
         }
 
@@ -185,7 +215,7 @@ class DashboardMetricsService
             ->when($filters['branch_id'] ?? null, fn ($query, $branch) => $query->where('branch_id', $branch))
             ->when($filters['halaqa_id'] ?? null, fn ($query, $halaqa) => $query->whereKey($halaqa))
             ->when($filters['program'] ?? null, fn ($query, $program) => $query->where('program', $program));
-        if ($user->hasRole('teacher')) {
+        if ($user->requiresTeacherAssignmentScope()) {
             $query->whereHas('teacherAssignments', fn ($assignments) => $assignments->whereHas('teacher', fn ($teacher) => $teacher->where('user_id', $user->id))->whereNull('ends_at'));
         }
 
@@ -194,25 +224,36 @@ class DashboardMetricsService
 
     private function teacherToday(User $user): ?array
     {
-        if (! $user->hasRole('teacher') || ! $user->teacherProfile) {
+        $teacher = $user->teacherProfile;
+        if (! $user->can('recitations.create') || ! $teacher?->active) {
             return null;
         }
 
         $halaqas = Halaqa::query()
             ->whereHas('teacherAssignments', fn ($assignments) => $assignments
-                ->where('teacher_profile_id', $user->teacherProfile->id)
+                ->where('teacher_profile_id', $teacher->id)
                 ->whereDate('starts_at', '<=', today())
                 ->where(fn ($dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', today())))
             ->withCount(['currentStudents as active_students_count' => fn ($query) => $query->where('status', 'active')])
+            ->withCount(['dailyRecords as recorded_today_count' => fn ($query) => $query
+                ->where('teacher_profile_id', $teacher->id)
+                ->whereDate('record_date', today())])
+            ->with('schedules')
             ->get();
         $studentIds = Student::query()->whereIn('current_halaqa_id', $halaqas->pluck('id'))->pluck('id');
-        $recorded = DailyRecord::query()->whereIn('student_id', $studentIds)->whereDate('record_date', today())->count();
+        $recorded = $halaqas->sum('recorded_today_count');
+        $openAlerts = StudentAlert::query()
+            ->whereIn('student_id', $studentIds)
+            ->whereIn('status', ['open', 'acknowledged'])
+            ->count();
 
         return [
+            'center' => $teacher->center()->first(['id', 'name']),
             'halaqas' => $halaqas,
             'students' => $studentIds->count(),
             'recorded' => $recorded,
             'missing' => max(0, $studentIds->count() - $recorded),
+            'open_alerts' => $openAlerts,
         ];
     }
 }

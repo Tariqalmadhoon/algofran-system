@@ -10,8 +10,10 @@ use App\Models\DailyRecord;
 use App\Models\Halaqa;
 use App\Models\QuranAyah;
 use App\Models\QuranSurah;
+use App\Models\ReportExport;
 use App\Models\Student;
 use App\Models\TeacherProfile;
+use App\Services\ReportExportService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Gate;
@@ -42,6 +44,14 @@ class TeacherDailyRecorder extends Component
 
     public array $items = [];
 
+    public bool $showExportPanel = false;
+
+    public string $exportDateFrom = '';
+
+    public string $exportDateTo = '';
+
+    public ?int $latestExportId = null;
+
     public function mount(): void
     {
         Gate::authorize('recitations.create');
@@ -50,6 +60,8 @@ class TeacherDailyRecorder extends Component
 
         $this->teacherProfileId = $teacher->id;
         $this->recordDate = today()->toDateString();
+        $this->exportDateFrom = today()->startOfMonth()->toDateString();
+        $this->exportDateTo = today()->toDateString();
         $this->items = $this->freshItems();
         $this->halaqaId = (string) ($this->assignedHalaqas()->first()?->id ?? '');
     }
@@ -71,6 +83,15 @@ class TeacherDailyRecorder extends Component
         $this->studentSearch = '';
         $this->resetRecorder();
         $this->resetValidation();
+    }
+
+    public function updatedTeacherProfileId(mixed $value): void
+    {
+        $teacher = auth()->user()?->teacherProfile()->where('active', true)->first();
+        if ($teacher && (int) $value !== (int) $teacher->id) {
+            $this->teacherProfileId = $teacher->id;
+            $this->addError('teacherProfileId', 'تم رفض تغيير هوية المحفّظ. أعد المحاولة من حسابك الحالي.');
+        }
     }
 
     public function updatedAttendanceStatus(string $status): void
@@ -260,6 +281,11 @@ class TeacherDailyRecorder extends Component
 
     public function save(RecordStudentDailyRecordAction $recordDaily): void
     {
+        if ($this->getErrorBag()->has('teacherProfileId')) {
+            return;
+        }
+
+        $teacher = $this->authenticatedTeacherProfile();
         $data = $this->validate([
             'recordDate' => ['required', 'date', 'before_or_equal:today'],
             'halaqaId' => ['required', 'exists:halaqas,id'],
@@ -293,7 +319,6 @@ class TeacherDailyRecorder extends Component
 
         $halaqa = Halaqa::query()->findOrFail($data['halaqaId']);
         $student = Student::query()->findOrFail($data['studentId']);
-        $teacher = TeacherProfile::query()->findOrFail($this->teacherProfileId);
         Gate::authorize('create', [DailyRecord::class, $halaqa, $data['recordDate']]);
 
         $items = [];
@@ -352,6 +377,38 @@ class TeacherDailyRecorder extends Component
         session()->flash('success', "تم حفظ الحضور والتسميع اليومي للطالب. {$studentName}: {$itemsCount} بنود تسميع. يمكنك الآن اختيار الطالب التالي.");
     }
 
+    public function exportMemorizationRecords(ReportExportService $exports): void
+    {
+        Gate::authorize('recitations.export');
+        if ($this->getErrorBag()->has('teacherProfileId')) {
+            return;
+        }
+
+        $teacher = $this->authenticatedTeacherProfile();
+        $data = $this->validate([
+            'exportDateFrom' => ['required', 'date', 'before_or_equal:exportDateTo'],
+            'exportDateTo' => ['required', 'date', 'after_or_equal:exportDateFrom', 'before_or_equal:today'],
+        ], [], [
+            'exportDateFrom' => 'بداية فترة التصدير',
+            'exportDateTo' => 'نهاية فترة التصدير',
+        ]);
+
+        $export = $exports->request('memorization_records', [
+            'date_from' => $data['exportDateFrom'],
+            'date_to' => $data['exportDateTo'],
+            'teacher_profile_id' => $teacher->id,
+        ], auth()->user());
+
+        $this->latestExportId = $export->id;
+        $this->showExportPanel = true;
+        session()->flash(
+            'success',
+            $export->status === 'ready'
+                ? 'تم إعداد ملف سجلات الحفظ، ويمكنك تنزيله الآن.'
+                : 'بدأ إعداد ملف سجلات الحفظ، وسيظهر في مركز التقارير عند اكتماله.',
+        );
+    }
+
     public function render(): View
     {
         $halaqas = $this->assignedHalaqas();
@@ -361,10 +418,11 @@ class TeacherDailyRecorder extends Component
                     ->whereDate('starts_at', '<=', $this->recordDate)
                     ->where(fn ($dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', $this->recordDate));
             }), fn ($query) => $query->whereRaw('1 = 0'))
+            ->with('photo:id')
             ->withExists(['dailyRecords as recorded_for_date' => fn ($query) => $query->whereDate('record_date', $this->recordDate)])
             ->where('status', 'active')
             ->orderBy('full_name')
-            ->get(['id', 'student_number', 'full_name']);
+            ->get(['id', 'student_number', 'full_name', 'first_name', 'family_name', 'photo_private_file_id']);
 
         $students = $allStudents;
         if (trim($this->studentSearch) !== '') {
@@ -391,21 +449,52 @@ class TeacherDailyRecorder extends Component
             'attendanceStatuses' => AttendanceStatus::cases(),
             'evaluations' => EvaluationRating::cases(),
             'recitationTypes' => collect(RecitationType::cases())->keyBy(fn (RecitationType $type) => $type->value),
+            'latestExport' => $this->latestExportId
+                ? ReportExport::query()->where('user_id', auth()->id())->with('privateFile:id,original_name')->find($this->latestExportId)
+                : null,
         ]);
     }
 
     /** @return Collection<int, Halaqa> */
     private function assignedHalaqas(): Collection
     {
+        $teacher = $this->authenticatedTeacherProfile(false);
+
         return Halaqa::query()
             ->where('active', true)
-            ->whereHas('teacherAssignments', function ($assignments) {
-                $assignments->where('teacher_profile_id', $this->teacherProfileId)
+            ->whereHas('teacherAssignments', function ($assignments) use ($teacher) {
+                $assignments->where('teacher_profile_id', $teacher->id)
                     ->whereDate('starts_at', '<=', $this->recordDate)
                     ->where(fn ($dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', $this->recordDate));
             })
             ->orderBy('name')
             ->get(['id', 'name']);
+    }
+
+    private function authenticatedTeacherProfile(bool $rejectIdentityChange = true): TeacherProfile
+    {
+        $teacher = auth()->user()?->teacherProfile()
+            ->where('active', true)
+            ->whereHas('user', fn ($query) => $query->where('active', true)->whereNull('archived_at'))
+            ->first();
+
+        if (! $teacher) {
+            throw ValidationException::withMessages([
+                'teacherProfileId' => 'لا يوجد ملف محفّظ فعّال لهذا الحساب.',
+            ]);
+        }
+
+        if (isset($this->teacherProfileId) && $this->teacherProfileId !== $teacher->id) {
+            $this->teacherProfileId = $teacher->id;
+
+            if ($rejectIdentityChange) {
+                throw ValidationException::withMessages([
+                    'teacherProfileId' => 'تم رفض تغيير هوية المحفّظ. أعد المحاولة من حسابك الحالي.',
+                ]);
+            }
+        }
+
+        return $teacher;
     }
 
     private function ayah(int $surahId, int $ayahNumber, string $field): QuranAyah

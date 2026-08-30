@@ -21,6 +21,8 @@ class EnrollStudentInHalaqaAction
 
     public function execute(Student $student, Halaqa $halaqa, string $startsAt, User $actor, ?string $reason = null): HalaqaEnrollment
     {
+        $this->ensureTeacherIsAssignedToHalaqa($halaqa, $actor);
+
         return DB::transaction(function () use ($student, $halaqa, $startsAt, $actor, $reason) {
             $start = Carbon::parse($startsAt)->startOfDay();
             $student = Student::query()->lockForUpdate()->findOrFail($student->id);
@@ -63,5 +65,27 @@ class EnrollStudentInHalaqaAction
 
             return $enrollment;
         });
+    }
+
+    private function ensureTeacherIsAssignedToHalaqa(Halaqa $halaqa, User $actor): void
+    {
+        if (! $actor->requiresTeacherAssignmentScope()) {
+            return;
+        }
+
+        $teacher = $actor->teacherProfile;
+        $assigned = $teacher?->active
+            && $teacher->assignments()
+                ->where('halaqa_id', $halaqa->id)
+                ->whereDate('starts_at', '<=', today())
+                ->where(fn ($dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', today()))
+                ->whereHas('halaqa', fn ($assignedHalaqa) => $assignedHalaqa->where('active', true))
+                ->exists();
+
+        if (! $assigned) {
+            throw ValidationException::withMessages([
+                'halaqa_id' => 'يمكن للمحفّظ إلحاق الطالب بحلقة مسندة إليه حاليًا فقط.',
+            ]);
+        }
     }
 }

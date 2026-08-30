@@ -7,18 +7,23 @@ use App\Actions\Students\CreateStudentAction;
 use App\Actions\Students\EnrollStudentInHalaqaAction;
 use App\Actions\Students\RecordInitialBaselineAction;
 use App\Livewire\StudentProfile;
+use App\Livewire\StudentsIndex;
 use App\Livewire\TeacherDailyRecorder;
 use App\Models\Branch;
 use App\Models\Center;
 use App\Models\Guardian;
 use App\Models\Halaqa;
+use App\Models\PrivateFile;
 use App\Models\QuranAyah;
 use App\Models\QuranSurah;
+use App\Models\ReportExport;
+use App\Models\StaffProfile;
 use App\Models\Student;
 use App\Models\TeacherProfile;
 use App\Models\User;
 use App\Services\PrivateFileService;
 use App\Services\QuranRangeService;
+use App\Services\ReportDataService;
 use App\Services\StudentVisibilityService;
 use Database\Seeders\QuranReferenceSeeder;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -27,6 +32,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
 
 class PhaseTwoStudentTrackingTest extends TestCase
@@ -68,15 +74,16 @@ class PhaseTwoStudentTrackingTest extends TestCase
         $registrar = User::factory()->create();
         $registrar->assignRole('registrar');
         $this->actingAs($registrar);
-        [, , $firstHalaqa, $secondHalaqa] = $this->organization();
+        [$center, $branch, $firstHalaqa, $secondHalaqa] = $this->organization();
+        $this->staffInCenter($registrar, $center, $branch, 'STF-LIFECYCLE');
 
         $student = $this->createStudent($registrar, $firstHalaqa, 'STU-001');
         $this->assertSame($firstHalaqa->id, $student->current_halaqa_id);
         $this->assertDatabaseHas('halaqa_enrollments', ['student_id' => $student->id, 'halaqa_id' => $firstHalaqa->id, 'ends_at' => null]);
 
-        app(EnrollStudentInHalaqaAction::class)->execute($student, $secondHalaqa, '2026-08-25', $registrar, 'تغيير المستوى');
+        app(EnrollStudentInHalaqaAction::class)->execute($student, $secondHalaqa, today()->toDateString(), $registrar, 'تغيير المستوى');
         $firstEnrollment = $student->enrollments()->where('halaqa_id', $firstHalaqa->id)->firstOrFail();
-        $this->assertSame('2026-08-24', $firstEnrollment->ends_at->toDateString());
+        $this->assertSame(today()->subDay()->toDateString(), $firstEnrollment->ends_at->toDateString());
         $this->assertSame($secondHalaqa->id, $student->fresh()->current_halaqa_id);
 
         $guardianData = [
@@ -131,6 +138,7 @@ class PhaseTwoStudentTrackingTest extends TestCase
     public function test_teacher_records_daily_attendance_and_quran_items_without_page_reload(): void
     {
         $this->seed(QuranReferenceSeeder::class);
+        Storage::fake('private');
         $teacherUser = User::factory()->create();
         $teacherUser->assignRole('teacher');
         [$center, $branch, $halaqa] = $this->organization();
@@ -147,9 +155,11 @@ class PhaseTwoStudentTrackingTest extends TestCase
             'starts_at' => today()->subMonth()->toDateString(),
         ]);
         $student = $this->createStudent($teacherUser, $halaqa, 'STU-DAILY');
+        $student->update(['identity_number' => 'ID-STU-DAILY']);
 
-        Livewire::actingAs($teacherUser)
+        $component = Livewire::actingAs($teacherUser)
             ->test(TeacherDailyRecorder::class)
+            ->assertSee('تصدير سجلات الحفظ')
             ->assertSet('halaqaId', (string) $halaqa->id)
             ->assertSee($student->full_name)
             ->set('studentId', (string) $student->id)
@@ -178,6 +188,224 @@ class PhaseTwoStudentTrackingTest extends TestCase
         $this->assertDatabaseHas('recitation_items', ['type' => 'new_memorization', 'start_ayah_id' => 1, 'end_ayah_id' => 7, 'memorization_errors' => 1]);
         $this->assertDatabaseHas('recitation_items', ['type' => 'recent_revision', 'start_ayah_id' => 8, 'end_ayah_id' => 12]);
         $this->assertDatabaseHas('student_timeline_events', ['student_id' => $student->id, 'event_type' => 'daily-record.created']);
+
+        $report = app(ReportDataService::class)->build('memorization_records', [
+            'date_from' => today()->toDateString(),
+            'date_to' => today()->toDateString(),
+        ], $teacherUser);
+        $this->assertSame(['رقم الطالب', 'التاريخ واليوم', 'اسم الطالب', 'هوية الطالب', 'الحفظ', 'المراجعة', 'التقييم'], $report['headings']);
+        $this->assertCount(1, $report['rows']);
+        $this->assertSame('STU-DAILY', $report['rows'][0][0]);
+        $this->assertStringContainsString(today()->toDateString(), $report['rows'][0][1]);
+        $this->assertSame('ID-STU-DAILY', $report['rows'][0][3]);
+        $this->assertSame('سورة الفاتحة، الآيات 1–7', $report['rows'][0][4]);
+        $this->assertSame('مراجعة قريبة: سورة البقرة، الآيات 1–5', $report['rows'][0][5]);
+        $this->assertStringContainsString('عام: جيد جدًا', $report['rows'][0][6]);
+
+        $component
+            ->set('exportDateFrom', today()->toDateString())
+            ->set('exportDateTo', today()->toDateString())
+            ->call('exportMemorizationRecords')
+            ->assertHasNoErrors()
+            ->assertSee('تنزيل ملف Excel');
+
+        $export = ReportExport::query()->findOrFail($component->get('latestExportId'));
+        $this->assertSame('ready', $export->status);
+        $this->assertSame(1, $export->rows_count);
+        $this->assertNotNull($export->private_file_id);
+        Storage::disk('private')->assertExists($export->privateFile->path);
+
+        $workbook = IOFactory::load(Storage::disk('private')->path($export->privateFile->path));
+        $this->assertSame($report['headings'], $workbook->getActiveSheet()->rangeToArray('A1:G1')[0]);
+        $this->actingAs($teacherUser)->get(route('private-files.show', $export->privateFile))->assertOk();
+    }
+
+    public function test_assigned_teacher_can_add_students_only_to_their_halaqa_with_a_visible_photo(): void
+    {
+        Storage::fake('private');
+        $teacherUser = User::factory()->create();
+        $teacherUser->assignRole('teacher');
+        [$center, $branch, $ownHalaqa, $otherHalaqa] = $this->organization();
+        $teacher = TeacherProfile::query()->create([
+            'user_id' => $teacherUser->id,
+            'center_id' => $center->id,
+            'branch_id' => $branch->id,
+            'employee_number' => 'T-CREATE',
+            'active' => true,
+        ]);
+        $ownHalaqa->teacherAssignments()->create([
+            'teacher_profile_id' => $teacher->id,
+            'role' => 'primary',
+            'starts_at' => today()->subDay()->toDateString(),
+        ]);
+
+        Livewire::actingAs($teacherUser)
+            ->test(StudentsIndex::class)
+            ->assertSet('halaqaId', (string) $ownHalaqa->id)
+            ->assertSee($ownHalaqa->name)
+            ->assertDontSee($otherHalaqa->name)
+            ->set('studentNumber', 'STU-TEACHER-001')
+            ->set('firstName', 'محمد')
+            ->set('fatherName', 'أحمد')
+            ->set('grandfatherName', 'علي')
+            ->set('familyName', 'الغفران')
+            ->set('photo', UploadedFile::fake()->image('student-photo.jpg', 400, 400))
+            ->call('save')
+            ->assertHasNoErrors()
+            ->assertSee('محمد أحمد علي الغفران');
+
+        $student = Student::query()->where('student_number', 'STU-TEACHER-001')->firstOrFail();
+        $this->assertSame($ownHalaqa->id, $student->current_halaqa_id);
+        $this->assertNotNull($student->photo_private_file_id);
+        $this->assertDatabaseHas('private_files', [
+            'id' => $student->photo_private_file_id,
+            'owner_type' => $student->getMorphClass(),
+            'owner_id' => $student->id,
+        ]);
+        $photo = PrivateFile::query()->findOrFail($student->photo_private_file_id);
+        Livewire::actingAs($teacherUser)
+            ->test(StudentsIndex::class)
+            ->assertSee(route('private-files.preview', $photo), false);
+
+        Livewire::actingAs($teacherUser)
+            ->test(StudentsIndex::class)
+            ->set('studentNumber', 'STU-TEACHER-002')
+            ->set('firstName', 'طالب')
+            ->set('fatherName', 'غير')
+            ->set('grandfatherName', 'مصرح')
+            ->set('familyName', 'له')
+            ->set('halaqaId', (string) $otherHalaqa->id)
+            ->call('save')
+            ->assertHasErrors(['halaqaId']);
+
+        $this->assertDatabaseMissing('students', ['student_number' => 'STU-TEACHER-002']);
+    }
+
+    public function test_assigned_teacher_can_complete_the_full_profile_of_their_student_only(): void
+    {
+        $this->seed(QuranReferenceSeeder::class);
+        Storage::fake('private');
+
+        $teacherUser = User::factory()->create();
+        $teacherUser->assignRole('teacher');
+        [$center, $branch, $ownHalaqa, $otherHalaqa] = $this->organization();
+        $teacher = TeacherProfile::query()->create([
+            'user_id' => $teacherUser->id,
+            'center_id' => $center->id,
+            'branch_id' => $branch->id,
+            'employee_number' => 'T-FULL-PROFILE',
+            'active' => true,
+        ]);
+        $ownHalaqa->teacherAssignments()->create([
+            'teacher_profile_id' => $teacher->id,
+            'role' => 'primary',
+            'starts_at' => today()->subDay()->toDateString(),
+        ]);
+
+        $ownStudent = $this->createStudent($teacherUser, $ownHalaqa, 'STU-FULL-PROFILE');
+        $registrar = User::factory()->create();
+        $registrar->assignRole('registrar');
+        $otherStudent = $this->createStudent($registrar, $otherHalaqa, 'STU-NOT-ASSIGNED');
+
+        $component = Livewire::actingAs($teacherUser)
+            ->test(StudentProfile::class, ['student' => $ownStudent])
+            ->assertSee('لا يحتاج ولي الأمر إلى حساب مستقل')
+            ->assertSee($ownHalaqa->name)
+            ->assertDontSee($otherHalaqa->name)
+            ->set('profileIdentityNumber', 'TEACHER-STUDENT-ID')
+            ->set('profileContactPhone', '0599000011')
+            ->set('profileNotes', 'استكمل المحفّظ ملف الطالب')
+            ->set('profilePhoto', UploadedFile::fake()->image('student-profile.jpg', 500, 500))
+            ->set('profileIdentityDocument', UploadedFile::fake()->create('student-id.pdf', 100, 'application/pdf'))
+            ->call('saveProfile')
+            ->assertHasNoErrors()
+            ->set('guardianName', 'خالد أحمد')
+            ->set('guardianPhone', '0599000022')
+            ->set('guardianRelationship', 'father')
+            ->set('guardianIdentityDocument', UploadedFile::fake()->create('guardian-id.pdf', 100, 'application/pdf'))
+            ->call('saveGuardian')
+            ->assertHasNoErrors()
+            ->set('baselineStartSurahId', '1')
+            ->set('baselineStartAyahNumber', '1')
+            ->set('baselineEndAyahNumber', '7')
+            ->call('saveBaseline')
+            ->assertHasNoErrors();
+
+        $student = $ownStudent->fresh();
+        $guardian = $student->guardians()->firstOrFail();
+        $this->assertSame('TEACHER-STUDENT-ID', $student->identity_number);
+        $this->assertSame('0599000011', $student->contact_phone);
+        $this->assertNotNull($student->photo_private_file_id);
+        $this->assertNotNull($student->identity_private_file_id);
+        $this->assertSame('خالد أحمد', $guardian->full_name);
+        $this->assertNotNull($guardian->identity_private_file_id);
+        $this->assertDatabaseHas('student_memorization_baselines', [
+            'student_id' => $student->id,
+            'start_ayah_id' => 1,
+            'end_ayah_id' => 7,
+        ]);
+
+        $component
+            ->call('editGuardian', $guardian->id)
+            ->assertSet('editingGuardianId', $guardian->id)
+            ->assertSet('guardianName', 'خالد أحمد')
+            ->set('guardianPhone', '0599000033')
+            ->call('saveGuardian')
+            ->assertHasNoErrors()
+            ->assertSet('editingGuardianId', null)
+            ->assertSee('تم تحديث بيانات ولي الأمر.');
+        $this->assertSame('0599000033', $guardian->fresh()->phone);
+        $this->assertSame(1, $student->guardians()->count());
+        $this->assertDatabaseHas('student_timeline_events', [
+            'student_id' => $student->id,
+            'event_type' => 'guardian.updated',
+        ]);
+
+        $this->assertTrue($teacherUser->can('update', $student));
+        $this->assertFalse($teacherUser->can('update', $otherStudent));
+        $this->actingAs($teacherUser)
+            ->get(route('private-files.show', $guardian->identityDocument))
+            ->assertOk();
+
+        $component
+            ->set('enrollmentHalaqaId', (string) $otherHalaqa->id)
+            ->call('saveEnrollment')
+            ->assertHasErrors(['enrollmentHalaqaId']);
+    }
+
+    public function test_student_photo_can_be_previewed_replaced_and_removed(): void
+    {
+        Storage::fake('private');
+        $registrar = User::factory()->create();
+        $registrar->assignRole('registrar');
+        $this->actingAs($registrar);
+        [$center, $branch, $halaqa] = $this->organization();
+        $this->staffInCenter($registrar, $center, $branch, 'STF-PHOTO');
+        $student = $this->createStudent($registrar, $halaqa, 'STU-PHOTO');
+
+        Livewire::actingAs($registrar)
+            ->test(StudentProfile::class, ['student' => $student])
+            ->set('profilePhoto', UploadedFile::fake()->image('student.jpg', 500, 500))
+            ->call('saveProfile')
+            ->assertHasNoErrors()
+            ->assertSee('تم تحديث بيانات الطالب.');
+
+        $photo = PrivateFile::query()->findOrFail($student->fresh()->photo_private_file_id);
+        Storage::disk('private')->assertExists($photo->path);
+        $this->get(route('private-files.preview', $photo))
+            ->assertOk()
+            ->assertHeader('content-type', 'image/jpeg');
+
+        Livewire::actingAs($registrar)
+            ->test(StudentProfile::class, ['student' => $student->fresh()])
+            ->call('removeProfilePhotoSelection')
+            ->assertSet('removeProfilePhoto', true)
+            ->call('saveProfile')
+            ->assertHasNoErrors();
+
+        $this->assertNull($student->fresh()->photo_private_file_id);
+        $this->assertSoftDeleted('private_files', ['id' => $photo->id]);
+        Storage::disk('private')->assertMissing($photo->path);
     }
 
     public function test_teacher_daily_recorder_guides_quran_range_and_exposes_duplicate_errors(): void
@@ -261,7 +489,9 @@ class PhaseTwoStudentTrackingTest extends TestCase
             'starts_at' => today()->subDay()->toDateString(),
         ]);
         $ownStudent = $this->createStudent($teacherUser, $ownHalaqa, 'STU-OWN');
-        $otherStudent = $this->createStudent($teacherUser, $otherHalaqa, 'STU-OTHER');
+        $registrar = User::factory()->create();
+        $registrar->assignRole('registrar');
+        $otherStudent = $this->createStudent($registrar, $otherHalaqa, 'STU-OTHER');
 
         $visibleIds = app(StudentVisibilityService::class)->queryFor($teacherUser)->pluck('id')->all();
         $this->assertSame([$ownStudent->id], $visibleIds);
@@ -320,10 +550,22 @@ class PhaseTwoStudentTrackingTest extends TestCase
             'identity_number' => null,
             'birth_date' => '2014-01-01',
             'contact_phone' => null,
-            'registration_date' => today()->toDateString(),
+            'registration_date' => today()->subDay()->toDateString(),
             'status' => 'active',
             'halaqa_id' => $halaqa?->id,
             'notes' => null,
         ], $actor);
+    }
+
+    private function staffInCenter(User $user, Center $center, Branch $branch, string $number): StaffProfile
+    {
+        return StaffProfile::query()->create([
+            'user_id' => $user->id,
+            'center_id' => $center->id,
+            'branch_id' => $branch->id,
+            'employee_number' => $number,
+            'job_title' => 'مسجل',
+            'active' => true,
+        ]);
     }
 }

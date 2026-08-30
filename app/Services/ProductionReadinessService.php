@@ -36,7 +36,9 @@ class ProductionReadinessService
             $this->check('api_token_expiration', (int) config('sanctum.expiration') > 0, true, 'API token expiration is enabled.'),
             $this->check('realtime', $this->realtimeIsReady(), true, 'Private Reverb broadcasting is configured.'),
             $this->check('cors', $this->corsIsRestricted(), true, 'CORS is restricted to the application origin.'),
-            $this->attempt('strong_identity', true, 'All sensitive accounts have confirmed two-factor authentication.', fn () => $this->sensitiveAccountsUseTwoFactor()),
+            config('system.identity.two_factor_enabled', false)
+                ? $this->attempt('strong_identity', true, 'All sensitive accounts have confirmed two-factor authentication.', fn () => $this->sensitiveAccountsUseTwoFactor())
+                : $this->check('strong_identity', true, false, 'Two-factor authentication is temporarily disabled.'),
             $this->attempt('demo_accounts', true, 'Demo accounts are absent.', fn () => ! User::query()->whereIn('email', ['admin@alquran.local', 'teacher@alquran.local'])->exists()),
             $this->check('bootstrap_writable', is_writable(base_path('bootstrap/cache')), true, 'Bootstrap cache directory is writable.'),
             $this->check('scheduler', count(app(Schedule::class)->events()) >= 5, true, 'Scheduled operational tasks are registered.'),

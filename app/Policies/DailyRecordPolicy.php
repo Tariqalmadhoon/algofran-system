@@ -19,7 +19,7 @@ class DailyRecordPolicy
             return false;
         }
 
-        if (! $user->hasRole('teacher')) {
+        if (! $user->requiresTeacherAssignmentScope()) {
             return true;
         }
 
@@ -35,6 +35,6 @@ class DailyRecordPolicy
     public function update(User $user, DailyRecord $record): bool
     {
         return $user->can('recitations.update')
-            && (! $user->hasRole('teacher') || $record->teacher?->user_id === $user->id);
+            && (! $user->requiresTeacherAssignmentScope() || $record->teacher?->user_id === $user->id);
     }
 }

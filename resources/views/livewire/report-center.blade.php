@@ -8,21 +8,33 @@
         </div>
     </div>
 
+    <x-flash-messages inline consume />
+
     @if($tab === 'reports')
         <section class="panel">
             <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                 <div class="md:col-span-2"><label class="form-label">نوع التقرير</label><select class="form-input" wire:model.live="reportType">@foreach($types as $value => $label)<option value="{{ $value }}">{{ $label }}</option>@endforeach</select></div>
-                <div><label class="form-label">من تاريخ</label><input type="date" class="form-input" wire:model.live="dateFrom"></div>
-                <div><label class="form-label">إلى تاريخ</label><input type="date" class="form-input" wire:model.live="dateTo"><x-input-error :messages="$errors->get('dateTo')" /></div>
-                <div><label class="form-label">الحلقة</label><select class="form-input" wire:model.live="halaqaId"><option value="">كل الحلقات</option>@foreach($halaqas as $halaqa)<option value="{{ $halaqa->id }}">{{ $halaqa->name }}</option>@endforeach</select></div>
-                <div class="md:col-span-2"><label class="form-label">الطالب</label><select class="form-input" wire:model.live="studentId"><option value="">كل الطلاب المسموحين</option>@foreach($students as $student)<option value="{{ $student->id }}">{{ $student->student_number }} — {{ $student->full_name }}</option>@endforeach</select></div>
-                <div class="flex items-end md:col-span-2 xl:col-span-3 xl:justify-end">
-                    @can('reports.export')
-                        <button type="button" class="btn-primary w-full xl:w-auto" wire:click="requestExport" wire:loading.attr="disabled" wire:target="requestExport">
-                            <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16"/></svg>
-                            <span wire:loading.remove wire:target="requestExport">تصدير Excel</span><span wire:loading wire:target="requestExport">جارٍ إعداد الملف...</span>
-                        </button>
-                    @endcan
+                @if($reportType === 'student_comprehensive')
+                    <div><label class="form-label">المركز</label><select class="form-input" wire:model.live="centerId"><option value="">اختر المركز</option>@foreach($centers as $center)<option value="{{ $center->id }}">{{ $center->name }}</option>@endforeach</select><x-input-error :messages="$errors->get('centerId')" /></div>
+                    <div class="md:col-span-2"><span class="form-label">نطاق الكشف</span><div class="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1.5"><label class="cursor-pointer"><input type="radio" wire:model.live="comprehensiveScope" value="center" class="peer sr-only" @disabled(auth()->user()->requiresTeacherAssignmentScope())><span class="flex min-h-11 items-center justify-center rounded-xl px-3 text-sm font-black text-slate-500 transition peer-checked:bg-white peer-checked:text-emerald-800 peer-checked:shadow-sm">المركز كاملًا</span></label><label class="cursor-pointer"><input type="radio" wire:model.live="comprehensiveScope" value="teacher" class="peer sr-only"><span class="flex min-h-11 items-center justify-center rounded-xl px-3 text-sm font-black text-slate-500 transition peer-checked:bg-white peer-checked:text-emerald-800 peer-checked:shadow-sm">محفّظ محدد</span></label></div></div>
+                    @if($comprehensiveScope === 'teacher')
+                        <div class="md:col-span-2 xl:col-span-3"><label class="form-label">المحفّظ</label><select class="form-input" wire:model.live="teacherProfileId" @disabled(auth()->user()->requiresTeacherAssignmentScope())><option value="">اختر المحفّظ</option>@foreach($teachers as $teacher)<option value="{{ $teacher->id }}">{{ $teacher->user->name }} — {{ $teacher->employee_number }}</option>@endforeach</select><x-input-error :messages="$errors->get('teacherProfileId')" /></div>
+                    @else
+                        <div class="md:col-span-2 xl:col-span-3 rounded-2xl border border-emerald-100 bg-emerald-50/60 px-4 py-3 text-sm leading-6 text-emerald-900">سيضم الملف جميع طلاب المركز المسموحين لحسابك، مرتبين بالاسم وبمتسلسل واضح.</div>
+                    @endif
+                @else
+                    <div><label class="form-label">من تاريخ</label><input type="date" class="form-input" wire:model.live="dateFrom"></div>
+                    <div><label class="form-label">إلى تاريخ</label><input type="date" class="form-input" wire:model.live="dateTo"><x-input-error :messages="$errors->get('dateTo')" /></div>
+                    <div><label class="form-label">الحلقة</label><select class="form-input" wire:model.live="halaqaId"><option value="">كل الحلقات</option>@foreach($halaqas as $halaqa)<option value="{{ $halaqa->id }}">{{ $halaqa->name }}</option>@endforeach</select></div>
+                    <div class="md:col-span-2"><label class="form-label">الطالب</label><select class="form-input" wire:model.live="studentId"><option value="">كل الطلاب المسموحين</option>@foreach($students as $student)<option value="{{ $student->id }}">{{ $student->student_number }} — {{ $student->full_name }}</option>@endforeach</select></div>
+                @endif
+                <div class="flex items-end md:col-span-2 xl:col-span-5 xl:justify-end">
+                    @if($canExportSelectedReport)
+                    <button type="button" class="btn-primary w-full xl:w-auto" wire:click="requestExport" wire:loading.attr="disabled" wire:target="requestExport">
+                        <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16"/></svg>
+                        <span wire:loading.remove wire:target="requestExport">تصدير Excel</span><span wire:loading wire:target="requestExport">جارٍ إعداد الملف...</span>
+                    </button>
+                    @endif
                 </div>
             </div>
         </section>

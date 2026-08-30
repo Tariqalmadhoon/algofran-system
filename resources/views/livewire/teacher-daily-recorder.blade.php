@@ -24,13 +24,40 @@
                 <h1 class="text-2xl font-black tracking-tight sm:text-3xl">جلسة واضحة من الطالب إلى الحفظ</h1>
                 <p class="mt-3 max-w-2xl text-sm leading-7 text-emerald-50/80">اختر الطالب، ثبّت الحضور، ثم حدّد نطاق التسميع من قائمة سور قابلة للبحث. سيُراجع النظام البداية والنهاية قبل الحفظ.</p>
             </div>
-            <div class="min-w-64 rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
-                <div class="mb-2 flex items-center justify-between text-sm"><span class="font-bold text-emerald-50">إنجاز الحلقة</span><strong dir="ltr">{{ $studentStats['recorded'] }} / {{ $studentStats['total'] }}</strong></div>
-                <div class="h-2 overflow-hidden rounded-full bg-black/15"><div class="h-full rounded-full bg-emerald-300 transition-all duration-500" style="width: {{ $progressPercentage }}%"></div></div>
-                <p class="mt-2 text-xs text-emerald-100">{{ $studentStats['waiting'] }} طلاب بانتظار التسجيل</p>
+            <div class="min-w-64 space-y-3">
+                <div class="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
+                    <div class="mb-2 flex items-center justify-between text-sm"><span class="font-bold text-emerald-50">إنجاز الحلقة</span><strong dir="ltr">{{ $studentStats['recorded'] }} / {{ $studentStats['total'] }}</strong></div>
+                    <div class="h-2 overflow-hidden rounded-full bg-black/15"><div class="h-full rounded-full bg-emerald-300 transition-all duration-500" style="width: {{ $progressPercentage }}%"></div></div>
+                    <p class="mt-2 text-xs text-emerald-100">{{ $studentStats['waiting'] }} طلاب بانتظار التسجيل</p>
+                </div>
+                @can('recitations.export')
+                    <button wire:click="$toggle('showExportPanel')" type="button" class="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/20 bg-white px-4 py-3 text-sm font-black text-emerald-950 shadow-lg transition hover:-translate-y-0.5 hover:bg-emerald-50">
+                        <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16"/></svg>
+                        تصدير سجلات الحفظ
+                    </button>
+                @endcan
             </div>
         </div>
     </header>
+
+    @if($showExportPanel)
+        <section class="panel overflow-hidden border-emerald-200 bg-gradient-to-l from-emerald-50/80 to-white" wire:key="memorization-export-panel">
+            <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                <div class="max-w-xl"><p class="eyebrow">Excel</p><h2 class="section-title">تصدير سجلات الحفظ والمراجعة</h2><p class="page-subtitle">يشمل الملف رقم الطالب، التاريخ واليوم، الاسم، الهوية، الحفظ، المراجعة والتقييم، ضمن طلابك وسجلاتك فقط.</p></div>
+                <div class="grid w-full gap-3 sm:grid-cols-2 lg:max-w-2xl lg:grid-cols-[1fr_1fr_auto]">
+                    <label><span class="form-label">من تاريخ</span><input wire:model="exportDateFrom" type="date" max="{{ today()->toDateString() }}" class="form-input"><x-input-error :messages="$errors->get('exportDateFrom')" /></label>
+                    <label><span class="form-label">إلى تاريخ</span><input wire:model="exportDateTo" type="date" max="{{ today()->toDateString() }}" class="form-input"><x-input-error :messages="$errors->get('exportDateTo')" /></label>
+                    <button wire:click="exportMemorizationRecords" wire:loading.attr="disabled" wire:target="exportMemorizationRecords" type="button" class="btn-primary self-end sm:col-span-2 lg:col-span-1"><span wire:loading.remove wire:target="exportMemorizationRecords">إنشاء الملف</span><span wire:loading wire:target="exportMemorizationRecords">جارٍ الإعداد…</span></button>
+                </div>
+            </div>
+            @if($latestExport)
+                <div class="mt-5 flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between" @if($latestExport->status === 'preparing') wire:poll.10s @endif>
+                    <div><p class="text-sm font-black text-emerald-950">ملف سجلات الحفظ</p><p class="mt-1 text-xs text-slate-500">{{ $latestExport->rows_count ?? 0 }} سجل · {{ $latestExport->created_at->translatedFormat('j F Y، H:i') }}</p></div>
+                    @if($latestExport->status === 'ready' && $latestExport->privateFile)<a href="{{ route('private-files.show', $latestExport->privateFile) }}" class="btn-primary">تنزيل ملف Excel</a>@elseif($latestExport->status === 'failed')<span class="inline-flex rounded-full bg-rose-50 px-3 py-1.5 text-xs font-black text-rose-700">تعذّر إعداد الملف</span>@else<span class="badge-warning">قيد الإعداد</span>@endif
+                </div>
+            @endif
+        </section>
+    @endif
 
     <ol class="grid gap-3 sm:grid-cols-3" aria-label="مراحل التسجيل">
         @foreach([
@@ -45,20 +72,15 @@
         @endforeach
     </ol>
 
-    @if (session('success'))
-        <div x-data="{ show: true }" x-show="show" x-transition class="flex items-start justify-between gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800 shadow-sm" role="status">
-            <span class="flex items-start gap-2"><span class="grid size-6 shrink-0 place-items-center rounded-full bg-emerald-600 text-xs text-white">✓</span>{{ session('success') }}</span>
-            <button type="button" @click="show = false" class="text-lg leading-none text-emerald-600" aria-label="إغلاق">×</button>
-        </div>
-    @endif
+    <x-flash-messages inline consume />
 
     @if ($errors->any())
-        <div class="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
-            <p class="font-black">تعذّر إكمال التسجيل. راجع الحقول المعلّمة:</p>
+        <x-feedback-alert type="error" title="تعذّر إكمال التسجيل" :duration="0">
+            <p>راجع الحقول المعلّمة قبل المحاولة مرة أخرى:</p>
             <ul class="mt-2 list-inside list-disc space-y-1 text-xs font-bold">
                 @foreach(array_slice(array_unique($errors->all()), 0, 5) as $message)<li>{{ $message }}</li>@endforeach
             </ul>
-        </div>
+        </x-feedback-alert>
     @endif
 
     <section class="panel">
@@ -101,7 +123,7 @@
                     wire:key="daily-student-{{ $student->id }}"
                 >
                     <span class="flex items-start gap-3">
-                        <span class="grid size-10 shrink-0 place-items-center rounded-xl {{ $student->recorded_for_date ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500 group-hover:bg-emerald-100 group-hover:text-emerald-700' }}">{{ $student->recorded_for_date ? '✓' : mb_substr($student->full_name, 0, 1) }}</span>
+                        <x-student-avatar :student="$student" size="sm" :badge="$student->recorded_for_date ? '✓' : null" @class(['opacity-75' => $student->recorded_for_date]) />
                         <span class="min-w-0"><span class="block truncate font-black text-emerald-950">{{ $student->full_name }}</span><span class="mt-1 block text-xs text-slate-500" dir="ltr">{{ $student->student_number }}</span></span>
                     </span>
                     <span class="mt-3 block border-t border-slate-100 pt-2 text-xs font-bold {{ $student->recorded_for_date ? 'text-emerald-700' : 'text-amber-600' }}">{{ $student->recorded_for_date ? 'مكتمل لهذا التاريخ' : 'اضغط لبدء التسجيل' }}</span>
@@ -122,7 +144,7 @@
             <section class="panel overflow-hidden !p-0">
                 <div class="flex flex-col gap-4 border-b border-slate-100 bg-emerald-50/60 p-5 sm:flex-row sm:items-center sm:justify-between">
                     <div class="flex items-center gap-3">
-                        <span class="grid size-12 place-items-center rounded-2xl bg-emerald-700 text-lg font-black text-white">{{ mb_substr($selectedStudent->full_name, 0, 1) }}</span>
+                        <x-student-avatar :student="$selectedStudent" />
                         <div><p class="text-xs font-bold text-emerald-700">تسجّل الآن للطالب</p><h2 class="text-lg font-black text-emerald-950">{{ $selectedStudent->full_name }}</h2><p class="text-xs text-slate-500" dir="ltr">{{ $selectedStudent->student_number }}</p></div>
                     </div>
                     <button wire:click="clearSelectedStudent" type="button" class="btn-secondary">تغيير الطالب</button>

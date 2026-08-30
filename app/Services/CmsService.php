@@ -7,6 +7,7 @@ use App\Models\CmsMedia;
 use App\Models\ContactMessage;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
@@ -51,9 +52,67 @@ class CmsService
         return $media;
     }
 
+    public function updateMedia(CmsMedia $media, array $data, User $actor): CmsMedia
+    {
+        $old = $media->only(['title', 'alt_text', 'caption', 'is_gallery', 'sort_order']);
+        $media->update($data);
+        $this->audit->record(
+            'cms-media.updated',
+            $media,
+            $old,
+            $media->only(['title', 'alt_text', 'caption', 'is_gallery', 'sort_order']),
+            $actor,
+        );
+
+        return $media->refresh();
+    }
+
+    public function deleteMedia(CmsMedia $media, User $actor): void
+    {
+        $disk = $media->disk;
+        $path = $media->path;
+        $old = $media->only(['kind', 'title', 'original_name', 'path', 'is_gallery']);
+
+        DB::transaction(function () use ($media, $actor, $old): void {
+            $media->delete();
+            $this->audit->record('cms-media.deleted', $media, $old, actor: $actor);
+        });
+
+        Storage::disk($disk)->delete($path);
+    }
+
+    public function changeContentStatus(CmsContent $content, string $status, User $actor): CmsContent
+    {
+        $old = $content->only(['status', 'published_at']);
+        $content->status = $status;
+
+        if ($status === 'published') {
+            $content->published_at = now();
+        }
+
+        $content->updated_by = $actor->id;
+        $content->save();
+        $this->audit->record(
+            'cms-content.status-changed',
+            $content,
+            $old,
+            $content->only(['status', 'published_at']),
+            $actor,
+        );
+
+        return $content;
+    }
+
     public function handleMessage(ContactMessage $message, User $actor): void
     {
         $message->update(['status' => 'handled', 'handled_at' => now(), 'handled_by' => $actor->id]);
         $this->audit->record('contact-message.handled', $message, newValues: ['status' => 'handled']);
+    }
+
+    public function reopenMessage(ContactMessage $message, User $actor): void
+    {
+        $old = $message->only(['status', 'handled_at', 'handled_by']);
+        $message->update(['status' => 'new', 'handled_at' => null, 'handled_by' => null]);
+        $this->audit->record('contact-message.reopened', $message, $old, ['status' => 'new'], $actor);
     }
 }

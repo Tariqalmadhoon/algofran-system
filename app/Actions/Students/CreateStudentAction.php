@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\StudentTimelineService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class CreateStudentAction
 {
@@ -20,6 +21,8 @@ class CreateStudentAction
 
     public function execute(array $data, User $actor): Student
     {
+        $this->ensureTeacherCanCreateInHalaqa($data, $actor);
+
         return DB::transaction(function () use ($data, $actor) {
             $names = array_map(fn ($value) => trim((string) $value), [
                 $data['first_name'], $data['father_name'], $data['grandfather_name'], $data['family_name'],
@@ -54,5 +57,28 @@ class CreateStudentAction
 
             return $student->refresh();
         });
+    }
+
+    private function ensureTeacherCanCreateInHalaqa(array $data, User $actor): void
+    {
+        if (! $actor->requiresTeacherAssignmentScope()) {
+            return;
+        }
+
+        $halaqaId = (int) ($data['halaqa_id'] ?? 0);
+        $teacher = $actor->teacherProfile;
+        $assigned = $halaqaId > 0 && $teacher?->active
+            && $teacher->assignments()
+                ->where('halaqa_id', $halaqaId)
+                ->whereDate('starts_at', '<=', today())
+                ->where(fn ($dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', today()))
+                ->whereHas('halaqa', fn ($halaqa) => $halaqa->where('active', true))
+                ->exists();
+
+        if (! $assigned) {
+            throw ValidationException::withMessages([
+                'halaqaId' => 'يمكن للمحفّظ إضافة الطالب إلى حلقة مسندة إليه حاليًا فقط.',
+            ]);
+        }
     }
 }

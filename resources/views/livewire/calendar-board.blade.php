@@ -12,6 +12,8 @@
         @endcan
     </div>
 
+    <x-flash-messages inline consume />
+
     <section class="panel p-4 sm:p-5">
         <div class="flex flex-col gap-4 xl:flex-row xl:items-center">
             <div class="flex items-center gap-2">

@@ -13,6 +13,12 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        if ($this->container->environment(['local', 'testing'])) {
+            $this->call(GofranManualTestingSeeder::class);
+
+            return;
+        }
+
         $this->call(RolesAndPermissionsSeeder::class);
         $this->call(QuranReferenceSeeder::class);
         $this->call(AcademicSettingsSeeder::class);

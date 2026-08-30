@@ -3,22 +3,21 @@
         <div>
             <p class="eyebrow">إدارة الطلاب</p>
             <h1 class="page-title">ملفات الطلاب</h1>
-            <p class="page-subtitle">بحث سريع، بيانات موثقة، وحالة التحاق حالية مع تاريخ كامل للنقل بين الحلقات.</p>
+            <p class="page-subtitle">{{ $teacherMode ? 'أضف طلابك مباشرة إلى الحلقات المسندة إليك وتابع ملفاتهم.' : 'بحث سريع، بيانات موثقة، وحالة التحاق حالية مع تاريخ كامل للنقل بين الحلقات.' }}</p>
         </div>
         @can('create', App\Models\Student::class)
-            <button class="btn-primary flex" type="button" x-data @click="$dispatch('toggle-student-form')">إضافة طالب</button>
+            <button class="btn-primary flex" type="button" x-data @click="$dispatch('toggle-student-form')">{{ $teacherMode ? 'إضافة طالب إلى حلقتي' : 'إضافة طالب' }}</button>
         @endcan
     </header>
 
-    @if (session('success'))
-        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800" role="status">{{ session('success') }}</div>
-    @endif
+    <x-flash-messages inline consume />
 
     @can('create', App\Models\Student::class)
         <section x-data="{ open: false }" @toggle-student-form.window="open = !open" x-show="open" x-cloak class="panel">
             <div class="mb-5">
                 <p class="eyebrow">ملف جديد</p>
-                <h2 class="section-title">بيانات الطالب الأساسية</h2>
+                <h2 class="section-title">{{ $teacherMode ? 'إضافة طالب إلى حلقة مسندة إليك' : 'بيانات الطالب الأساسية' }}</h2>
+                @if($teacherMode)<p class="mt-2 text-sm leading-6 text-slate-500">ستظهر هنا حلقاتك النشطة فقط، ويُربط الطالب بالحَلقة المختارة فور الحفظ.</p>@endif
             </div>
             <form wire:submit="save" class="space-y-5">
                 <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -30,10 +29,12 @@
                     <label><span class="form-label">رقم الهوية</span><input wire:model="identityNumber" class="form-input" dir="ltr"><x-input-error :messages="$errors->get('identityNumber')" /></label>
                     <label><span class="form-label">تاريخ الميلاد</span><input wire:model="birthDate" type="date" class="form-input"><x-input-error :messages="$errors->get('birthDate')" /></label>
                     <label><span class="form-label">هاتف التواصل</span><input wire:model="contactPhone" class="form-input" dir="ltr"><x-input-error :messages="$errors->get('contactPhone')" /></label>
+                    <label><span class="form-label">نوع الكفالة</span><input wire:model="sponsorshipType" class="form-input" placeholder="مثال: كفالة تعليمية"><x-input-error :messages="$errors->get('sponsorshipType')" /></label>
+                    <label><span class="form-label">جهة الكفالة</span><input wire:model="sponsorshipOrganization" class="form-input" placeholder="اسم الجهة إن وجدت"><x-input-error :messages="$errors->get('sponsorshipOrganization')" /></label>
                     <label><span class="form-label">تاريخ التسجيل</span><input wire:model="registrationDate" type="date" class="form-input"><x-input-error :messages="$errors->get('registrationDate')" /></label>
                     <label><span class="form-label">الحالة</span><select wire:model="status" class="form-input">@foreach($statuses as $studentStatus)<option value="{{ $studentStatus->value }}">{{ $studentStatus->label() }}</option>@endforeach</select><x-input-error :messages="$errors->get('status')" /></label>
-                    <label><span class="form-label">الحلقة الأولى</span><select wire:model="halaqaId" class="form-input"><option value="">دون حلقة حاليًا</option>@foreach($halaqas as $halaqa)<option value="{{ $halaqa->id }}">{{ $halaqa->name }}</option>@endforeach</select><x-input-error :messages="$errors->get('halaqaId')" /></label>
-                    <label><span class="form-label">الصورة الشخصية</span><input wire:model="photo" type="file" accept="image/*" class="form-input"><x-input-error :messages="$errors->get('photo')" /></label>
+                    <label><span class="form-label">{{ $teacherMode ? 'الحلقة المسندة إليك' : 'الحلقة الأولى' }}</span><select wire:model="halaqaId" class="form-input"><option value="">{{ $teacherMode ? 'اختر الحلقة' : 'دون حلقة حاليًا' }}</option>@foreach($halaqas as $halaqa)<option value="{{ $halaqa->id }}">{{ $halaqa->name }}</option>@endforeach</select><x-input-error :messages="$errors->get('halaqaId')" /></label>
+                    <label class="md:col-span-2 xl:col-span-1"><span class="form-label">الصورة الشخصية</span><span class="flex items-center gap-3 rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/50 p-3">@if($photo)<img src="{{ $photo->temporaryUrl() }}" alt="معاينة صورة الطالب" class="size-14 rounded-2xl object-cover">@else<span class="grid size-14 shrink-0 place-items-center rounded-2xl bg-emerald-100 text-xl font-black text-emerald-700">ص</span>@endif<span class="min-w-0 flex-1"><input wire:model="photo" type="file" accept="image/jpeg,image/png,image/webp" class="block w-full text-xs text-slate-500 file:ml-3 file:rounded-xl file:border-0 file:bg-white file:px-3 file:py-2 file:font-bold file:text-emerald-700"><small wire:loading wire:target="photo" class="mt-1 block font-bold text-emerald-700">جارٍ تجهيز الصورة…</small></span></span><x-input-error :messages="$errors->get('photo')" /></label>
                     <label><span class="form-label">وثيقة الهوية الخاصة</span><input wire:model="identityDocument" type="file" accept=".pdf,image/*" class="form-input"><x-input-error :messages="$errors->get('identityDocument')" /></label>
                 </div>
                 <label><span class="form-label">ملاحظات</span><textarea wire:model="notes" rows="3" class="form-input"></textarea><x-input-error :messages="$errors->get('notes')" /></label>
@@ -56,7 +57,7 @@
                     @forelse($students as $student)
                         <tr wire:key="student-{{ $student->id }}">
                             <td dir="ltr">{{ $student->student_number }}</td>
-                            <td class="font-bold text-emerald-950">{{ $student->full_name }}</td>
+                            <td><a href="{{ route('students.show', $student) }}" class="flex items-center gap-3 font-bold text-emerald-950 hover:text-emerald-700"><x-student-avatar :student="$student" size="sm" /><span>{{ $student->full_name }}</span></a></td>
                             <td>{{ $student->currentHalaqa?->name ?? 'غير ملتحق' }}</td>
                             <td dir="ltr">{{ $student->contact_phone ?? '—' }}</td>
                             <td><span class="{{ $student->status->value === 'active' ? 'badge-active' : 'badge-inactive' }}">{{ $student->status->label() }}</span></td>

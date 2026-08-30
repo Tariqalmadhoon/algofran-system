@@ -11,6 +11,7 @@ use App\Models\Course;
 use App\Models\CourseEnrollment;
 use App\Models\Student;
 use App\Models\User;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class AcademicRecordsService
@@ -63,7 +64,68 @@ class AcademicRecordsService
             );
             $this->auditLogger->record('course.enrollment.saved', $enrollment, newValues: $enrollment->getAttributes());
 
+            if ($enrollment->status === CourseEnrollmentStatus::Completed && $enrollment->completed_at) {
+                $achievement = Achievement::query()->updateOrCreate(
+                    ['fingerprint' => "course-completion:{$course->id}:{$student->id}"],
+                    [
+                        'student_id' => $student->id,
+                        'type' => AchievementType::Course->value,
+                        'title' => 'إتمام '.$course->name,
+                        'description' => $enrollment->notes,
+                        'achieved_at' => $enrollment->completed_at,
+                        'issuer' => $course->center()->value('name'),
+                        'metadata' => [
+                            'course_id' => $course->id,
+                            'course_enrollment_id' => $enrollment->id,
+                            'result' => $enrollment->result,
+                            'grade' => $enrollment->grade,
+                        ],
+                        'created_by' => $actor->id,
+                    ],
+                );
+                $this->auditLogger->record(
+                    $achievement->wasRecentlyCreated ? 'achievement.created' : 'achievement.updated',
+                    $achievement,
+                    newValues: $achievement->getAttributes(),
+                );
+            }
+
             return $enrollment;
+        });
+    }
+
+    /**
+     * @param  Collection<int, Student>  $students
+     * @return array{created: int, skipped: int}
+     */
+    public function enrollStudents(Course $course, Collection $students, string $enrolledAt, User $actor): array
+    {
+        return DB::transaction(function () use ($course, $students, $enrolledAt, $actor): array {
+            $existingStudentIds = CourseEnrollment::query()
+                ->where('course_id', $course->id)
+                ->whereIn('student_id', $students->modelKeys())
+                ->pluck('student_id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            $created = 0;
+            foreach ($students as $student) {
+                if (in_array($student->id, $existingStudentIds, true)) {
+                    continue;
+                }
+
+                $this->enrollStudent($course, $student, [
+                    'enrolled_at' => $enrolledAt,
+                    'status' => CourseEnrollmentStatus::Enrolled->value,
+                    'result' => null,
+                    'grade' => null,
+                    'completed_at' => null,
+                    'notes' => null,
+                ], $actor);
+                $created++;
+            }
+
+            return ['created' => $created, 'skipped' => count($existingStudentIds)];
         });
     }
 

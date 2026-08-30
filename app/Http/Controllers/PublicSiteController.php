@@ -44,26 +44,52 @@ class PublicSiteController extends Controller
 
     public function activities(): View
     {
-        return view('public.content-index', ['heading' => 'الأنشطة والفعاليات', 'eyebrow' => 'حياة المركز', 'description' => 'محطات تعليمية وتربوية تجمع طلاب القرآن.', 'items' => $this->content('activity')->paginate(12), 'routeName' => 'activities.show']);
+        return view('public.content-index', [
+            'heading' => 'الأنشطة والفعاليات',
+            'eyebrow' => 'حياة المركز',
+            'description' => 'محطات تعليمية وتربوية تجمع طلاب القرآن، وتحوّل رحلة الحفظ إلى تجربة نابضة بالتفاعل والقيم.',
+            'items' => $this->content('activity')->paginate(12),
+            'routeName' => 'activities.show',
+            'contentKind' => 'activity',
+        ]);
     }
 
     public function activity(CmsContent $content): View
     {
         abort_unless($content->type === 'activity' && $content->status === 'published' && (! $content->published_at || $content->published_at->isPast()), 404);
 
-        return view('public.content-show', ['content' => $content->load('featuredMedia'), 'section' => 'الأنشطة', 'backRoute' => 'activities.index']);
+        return view('public.content-show', [
+            'content' => $content->load('featuredMedia'),
+            'section' => 'الأنشطة',
+            'backRoute' => 'activities.index',
+            'related' => $this->related($content),
+            'routeName' => 'activities.show',
+        ]);
     }
 
     public function news(): View
     {
-        return view('public.content-index', ['heading' => 'أخبار المركز', 'eyebrow' => 'آخر المستجدات', 'description' => 'تابع أخبار الحلقات والطلاب والبرامج.', 'items' => $this->content('news')->paginate(12), 'routeName' => 'news.show']);
+        return view('public.content-index', [
+            'heading' => 'أخبار المركز',
+            'eyebrow' => 'آخر المستجدات',
+            'description' => 'تابع أخبار الحلقات والطلاب والبرامج، واكتشف المحطات التي نصنع فيها أثرًا قرآنيًا مستمرًا.',
+            'items' => $this->content('news')->paginate(12),
+            'routeName' => 'news.show',
+            'contentKind' => 'news',
+        ]);
     }
 
     public function newsItem(CmsContent $content): View
     {
         abort_unless($content->type === 'news' && $content->status === 'published' && (! $content->published_at || $content->published_at->isPast()), 404);
 
-        return view('public.content-show', ['content' => $content->load('featuredMedia'), 'section' => 'الأخبار', 'backRoute' => 'news.index']);
+        return view('public.content-show', [
+            'content' => $content->load('featuredMedia'),
+            'section' => 'الأخبار',
+            'backRoute' => 'news.index',
+            'related' => $this->related($content),
+            'routeName' => 'news.show',
+        ]);
     }
 
     public function achievements(): View
@@ -118,5 +144,10 @@ class PublicSiteController extends Controller
     private function content(string $type)
     {
         return CmsContent::query()->published()->ofType($type)->with('featuredMedia')->orderByDesc('featured')->latest('published_at');
+    }
+
+    private function related(CmsContent $content)
+    {
+        return $this->content($content->type)->where('id', '!=', $content->id)->limit(3)->get();
     }
 }

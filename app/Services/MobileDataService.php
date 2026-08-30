@@ -24,7 +24,7 @@ class MobileDataService
     public function halaqaQuery(User $user): Builder
     {
         $query = Halaqa::query();
-        if ($user->hasAnyRole(['super-admin', 'center-manager', 'academic-supervisor', 'registrar'])) {
+        if ($user->hasRole('super-admin')) {
             return $query;
         }
 
@@ -36,7 +36,7 @@ class MobileDataService
     public function courseQuery(User $user): Builder
     {
         $query = Course::query();
-        if ($user->hasAnyRole(['super-admin', 'center-manager', 'academic-supervisor', 'registrar'])) {
+        if ($user->hasRole('super-admin')) {
             return $query;
         }
         $studentIds = $this->studentIds($user);

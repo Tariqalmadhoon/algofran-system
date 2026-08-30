@@ -7,6 +7,7 @@ use App\Models\Branch;
 use App\Models\Center;
 use App\Models\Halaqa;
 use App\Models\HalaqaSchedule;
+use App\Models\StaffProfile;
 use App\Models\Student;
 use App\Models\TeacherProfile;
 use App\Models\User;
@@ -94,6 +95,14 @@ class PhaseFourCalendarReportsTest extends TestCase
         $manager->assignRole('center-manager');
         $center = Center::query()->create(['name' => 'المركز الرئيسي', 'code' => 'MAIN']);
         $branch = Branch::query()->create(['center_id' => $center->id, 'name' => 'الفرع الأول', 'code' => 'B1']);
+        StaffProfile::query()->create([
+            'user_id' => $manager->id,
+            'center_id' => $center->id,
+            'branch_id' => $branch->id,
+            'employee_number' => 'STF-CALENDAR-MANAGER',
+            'job_title' => 'مدير المركز',
+            'active' => true,
+        ]);
         $teacherUser = User::factory()->create();
         $teacherUser->assignRole('teacher');
         $teacher = TeacherProfile::query()->create(['user_id' => $teacherUser->id, 'center_id' => $center->id, 'branch_id' => $branch->id, 'employee_number' => 'T-001', 'active' => true]);

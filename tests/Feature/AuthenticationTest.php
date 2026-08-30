@@ -3,11 +3,14 @@
 namespace Tests\Feature;
 
 use App\Models\AuditLog;
+use App\Models\PrivateFile;
 use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class AuthenticationTest extends TestCase
@@ -78,5 +81,47 @@ class AuthenticationTest extends TestCase
         $this->assertSame('مستخدم محدث', $user->name);
         $this->assertTrue(Hash::check('NewSecure456!', $user->password));
         $this->assertSame(2, AuditLog::query()->where('user_id', $user->id)->count());
+    }
+
+    public function test_profile_supports_avatar_preview_and_realtime_password_check(): void
+    {
+        Storage::fake('private');
+        $user = User::factory()->create(['password' => Hash::make('CurrentSecure123!')]);
+
+        $this->actingAs($user)->get(route('profile.edit'))
+            ->assertOk()
+            ->assertSee('قوة كلمة المرور')
+            ->assertSee('الصورة الشخصية');
+
+        $this->postJson(route('profile.password.check'), ['password' => 'wrong-password'])
+            ->assertOk()
+            ->assertJson(['valid' => false]);
+        $this->postJson(route('profile.password.check'), ['password' => 'CurrentSecure123!'])
+            ->assertOk()
+            ->assertJson(['valid' => true]);
+
+        $this->patch(route('profile.update'), [
+            'name' => $user->name,
+            'email' => $user->email,
+            'phone' => null,
+            'avatar' => UploadedFile::fake()->image('avatar.jpg', 400, 400),
+        ])->assertSessionHas('status', 'profile-updated');
+
+        $avatar = PrivateFile::query()->findOrFail($user->fresh()->avatar_private_file_id);
+        Storage::disk('private')->assertExists($avatar->path);
+        $this->get(route('private-files.preview', $avatar))
+            ->assertOk()
+            ->assertHeader('content-type', 'image/jpeg');
+
+        $this->patch(route('profile.update'), [
+            'name' => $user->name,
+            'email' => $user->email,
+            'phone' => null,
+            'remove_avatar' => true,
+        ])->assertSessionHas('status', 'profile-updated');
+
+        $this->assertNull($user->fresh()->avatar_private_file_id);
+        $this->assertSoftDeleted('private_files', ['id' => $avatar->id]);
+        Storage::disk('private')->assertMissing($avatar->path);
     }
 }

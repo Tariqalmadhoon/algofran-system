@@ -35,7 +35,7 @@ class AuthenticatedSessionController extends Controller
         $provider = $guard->getProvider();
         $user = $provider->retrieveByCredentials($credentials);
 
-        if (! $user || ! $user->active || ! $provider->validateCredentials($user, $credentials)) {
+        if (! $user || ! $user->active || $user->archived_at || ! $provider->validateCredentials($user, $credentials)) {
             RateLimiter::hit($key, 60);
             throw ValidationException::withMessages(['email' => 'بيانات الدخول غير صحيحة أو الحساب غير نشط.']);
         }
@@ -46,7 +46,7 @@ class AuthenticatedSessionController extends Controller
 
         RateLimiter::clear($key);
 
-        if ($user->hasEnabledTwoFactorAuthentication()) {
+        if (config('system.identity.two_factor_enabled', false) && $user->hasEnabledTwoFactorAuthentication()) {
             $request->session()->regenerate();
             $request->session()->put([
                 'login.id' => $user->getKey(),
