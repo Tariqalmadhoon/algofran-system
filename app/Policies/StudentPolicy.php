@@ -20,16 +20,32 @@ class StudentPolicy
 
     public function create(User $user): bool
     {
-        return $user->can('students.create');
+        if (! $user->can('students.create')) {
+            return false;
+        }
+
+        if (! $user->requiresTeacherAssignmentScope()) {
+            return true;
+        }
+
+        $teacher = $user->teacherProfile;
+
+        return (bool) $teacher?->active
+            && $teacher->assignments()
+                ->whereDate('starts_at', '<=', today())
+                ->where(fn ($dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', today()))
+                ->whereHas('halaqa', fn ($halaqa) => $halaqa->where('active', true))
+                ->exists();
     }
 
     public function update(User $user, Student $student): bool
     {
-        return $user->can('students.update') && ! $user->hasRole('teacher');
+        return $user->can('students.update')
+            && app(StudentVisibilityService::class)->canView($user, $student);
     }
 
     public function delete(User $user, Student $student): bool
     {
-        return $user->can('students.archive') && ! $user->hasRole('teacher');
+        return $user->can('students.archive') && ! $user->requiresTeacherAssignmentScope();
     }
 }

@@ -21,7 +21,7 @@ class AuthController extends Controller
         if (! $user || ! Hash::check($data['password'], $user->password)) {
             return response()->json(['message' => 'بيانات الدخول غير صحيحة.', 'error' => ['code' => 'invalid_credentials']], 422);
         }
-        if (! $user->active) {
+        if (! $user->active || $user->archived_at) {
             return response()->json(['message' => 'هذا الحساب غير نشط.', 'error' => ['code' => 'account_inactive']], 403);
         }
 
@@ -32,7 +32,7 @@ class AuthController extends Controller
             ], 403);
         }
 
-        if ($user->hasEnabledTwoFactorAuthentication()) {
+        if (config('system.identity.two_factor_enabled', false) && $user->hasEnabledTwoFactorAuthentication()) {
             $challenge = $challenges->issue($user, $data['device_name']);
 
             return response()->json([
@@ -53,6 +53,8 @@ class AuthController extends Controller
         AuditLogger $audit,
         MobileTwoFactorChallengeService $challenges,
     ): JsonResponse {
+        abort_unless(config('system.identity.two_factor_enabled', false), 404);
+
         $data = $request->validate([
             'challenge_token' => ['required', 'string', 'size:80'],
             'code' => ['nullable', 'string', 'required_without:recovery_code'],
@@ -78,6 +80,7 @@ class AuthController extends Controller
 
     private function issueToken(User $user, string $deviceName, AuditLogger $audit): JsonResponse
     {
+        abort_if(! $user->active || $user->archived_at, 403, 'هذا الحساب غير نشط.');
         $user->tokens()->where('name', $deviceName)->delete();
         $expiresAt = now()->addMinutes((int) config('sanctum.expiration', 43200));
         $token = $user->createToken($deviceName, ['mobile:read'], $expiresAt)->plainTextToken;

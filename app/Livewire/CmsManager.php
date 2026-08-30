@@ -9,6 +9,7 @@ use App\Services\AuditLogger;
 use App\Services\CmsService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
 use Livewire\Features\SupportFileUploads\WithFileUploads;
@@ -22,6 +23,8 @@ class CmsManager extends Component
     public string $typeFilter = '';
 
     public string $statusFilter = '';
+
+    public string $contentSearch = '';
 
     public ?int $editingContentId = null;
 
@@ -43,6 +46,10 @@ class CmsManager extends Component
 
     public string $contentFeaturedMediaId = '';
 
+    public $contentImageFile;
+
+    public string $contentImageAlt = '';
+
     public string $contentMetaTitle = '';
 
     public string $contentMetaDescription = '';
@@ -63,6 +70,28 @@ class CmsManager extends Component
 
     public int $mediaSortOrder = 0;
 
+    public string $mediaSearch = '';
+
+    public string $mediaKindFilter = '';
+
+    public ?int $editingMediaId = null;
+
+    public bool $showMediaEditor = false;
+
+    public string $editMediaTitle = '';
+
+    public string $editMediaAlt = '';
+
+    public string $editMediaCaption = '';
+
+    public bool $editMediaGallery = false;
+
+    public int $editMediaSortOrder = 0;
+
+    public string $messageSearch = '';
+
+    public string $messageStatusFilter = '';
+
     public function mount(): void
     {
         Gate::authorize('website.manage');
@@ -74,9 +103,53 @@ class CmsManager extends Component
         $this->showContentForm = true;
     }
 
+    public function generateSlug(): void
+    {
+        $base = Str::slug($this->contentTitle);
+        if ($base === '') {
+            $base = $this->contentType.'-'.now()->format('Ymd-His');
+        }
+
+        $slug = $base;
+        $suffix = 2;
+        while (CmsContent::withTrashed()
+            ->where('slug', $slug)
+            ->when($this->editingContentId, fn ($query) => $query->where('id', '!=', $this->editingContentId))
+            ->exists()) {
+            $slug = $base.'-'.$suffix++;
+        }
+
+        $this->contentSlug = $slug;
+        $this->resetValidation('contentSlug');
+    }
+
+    public function updatedContentImageFile(): void
+    {
+        $this->contentFeaturedMediaId = '';
+        $this->validateOnly('contentImageFile', [
+            'contentImageFile' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
+        ]);
+    }
+
+    public function updatedContentFeaturedMediaId(): void
+    {
+        if ($this->contentFeaturedMediaId !== '') {
+            $this->reset('contentImageFile');
+            $this->resetValidation('contentImageFile');
+        }
+    }
+
+    public function removeContentImage(): void
+    {
+        $this->reset('contentImageFile', 'contentImageAlt');
+        $this->resetValidation('contentImageFile');
+    }
+
     public function editContent(int $id): void
     {
         Gate::authorize('website.manage');
+        $this->reset('contentImageFile', 'contentImageAlt');
+        $this->resetValidation();
         $content = CmsContent::query()->findOrFail($id);
         $this->editingContentId = $content->id;
         $this->contentType = $content->type;
@@ -105,13 +178,28 @@ class CmsManager extends Component
             'contentExcerpt' => ['nullable', 'string', 'max:1000'], 'contentBody' => ['nullable', 'string'],
             'contentStatus' => ['required', Rule::in(['draft', 'published', 'archived'])],
             'contentPublishedAt' => ['nullable', 'date'], 'contentFeaturedMediaId' => ['nullable', 'exists:cms_media,id'],
+            'contentImageFile' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
+            'contentImageAlt' => ['nullable', 'string', 'max:255'],
             'contentMetaTitle' => ['nullable', 'string', 'max:255'], 'contentMetaDescription' => ['nullable', 'string', 'max:500'],
             'contentFeatured' => ['boolean'], 'contentSortOrder' => ['integer', 'between:0,65535'],
         ]);
+
+        $featuredMediaId = $data['contentFeaturedMediaId'] ?: null;
+        if ($this->contentImageFile) {
+            $uploadedMedia = $cms->uploadMedia($this->contentImageFile, [
+                'title' => $data['contentTitle'],
+                'alt_text' => $data['contentImageAlt'] ?: $data['contentTitle'],
+                'caption' => $data['contentExcerpt'] ?: null,
+                'is_gallery' => false,
+                'sort_order' => $data['contentSortOrder'],
+            ], auth()->user());
+            $featuredMediaId = $uploadedMedia->id;
+        }
+
         $cms->saveContent([
             'type' => $data['contentType'], 'title' => $data['contentTitle'], 'slug' => $data['contentSlug'],
             'excerpt' => $data['contentExcerpt'] ?: null, 'body' => $data['contentBody'] ?: null, 'status' => $data['contentStatus'],
-            'published_at' => $data['contentPublishedAt'] ?: null, 'featured_media_id' => $data['contentFeaturedMediaId'] ?: null,
+            'published_at' => $data['contentPublishedAt'] ?: null, 'featured_media_id' => $featuredMediaId,
             'meta_title' => $data['contentMetaTitle'] ?: null, 'meta_description' => $data['contentMetaDescription'] ?: null,
             'featured' => $data['contentFeatured'], 'sort_order' => $data['contentSortOrder'],
         ], auth()->user(), $content);
@@ -128,6 +216,20 @@ class CmsManager extends Component
         session()->flash('success', 'تم نقل المحتوى إلى الأرشيف المحذوف.');
     }
 
+    public function changeContentStatus(int $id, string $status, CmsService $cms): void
+    {
+        Gate::authorize('website.manage');
+        abort_unless(in_array($status, ['draft', 'published', 'archived'], true), 422);
+
+        $content = CmsContent::query()->findOrFail($id);
+        $cms->changeContentStatus($content, $status, auth()->user());
+        session()->flash('success', match ($status) {
+            'published' => 'تم نشر المحتوى وأصبح ظاهرًا في الموقع.',
+            'archived' => 'تمت أرشفة المحتوى وإخفاؤه عن الزوار.',
+            default => 'أعيد المحتوى إلى المسودة.',
+        });
+    }
+
     public function uploadMedia(CmsService $cms): void
     {
         Gate::authorize('website.manage');
@@ -142,6 +244,67 @@ class CmsManager extends Component
         session()->flash('success', 'تم رفع الوسيط وإضافته إلى المكتبة.');
     }
 
+    public function editMedia(int $id): void
+    {
+        Gate::authorize('website.manage');
+        $media = CmsMedia::query()->findOrFail($id);
+        $this->editingMediaId = $media->id;
+        $this->editMediaTitle = $media->title ?? '';
+        $this->editMediaAlt = $media->alt_text ?? '';
+        $this->editMediaCaption = $media->caption ?? '';
+        $this->editMediaGallery = $media->is_gallery;
+        $this->editMediaSortOrder = $media->sort_order;
+        $this->showMediaEditor = true;
+        $this->resetValidation();
+    }
+
+    public function saveMedia(CmsService $cms): void
+    {
+        Gate::authorize('website.manage');
+        $media = CmsMedia::query()->findOrFail($this->editingMediaId);
+        $data = $this->validate([
+            'editMediaTitle' => ['nullable', 'string', 'max:255'],
+            'editMediaAlt' => ['nullable', 'string', 'max:255'],
+            'editMediaCaption' => ['nullable', 'string', 'max:1000'],
+            'editMediaGallery' => ['boolean'],
+            'editMediaSortOrder' => ['integer', 'between:0,65535'],
+        ]);
+
+        $cms->updateMedia($media, [
+            'title' => $data['editMediaTitle'] ?: null,
+            'alt_text' => $data['editMediaAlt'] ?: null,
+            'caption' => $data['editMediaCaption'] ?: null,
+            'is_gallery' => $data['editMediaGallery'],
+            'sort_order' => $data['editMediaSortOrder'],
+        ], auth()->user());
+
+        $this->resetMediaEditor();
+        session()->flash('success', 'تم تحديث بيانات الوسيط.');
+    }
+
+    public function toggleMediaGallery(int $id, CmsService $cms): void
+    {
+        Gate::authorize('website.manage');
+        $media = CmsMedia::query()->findOrFail($id);
+        $cms->updateMedia($media, ['is_gallery' => ! $media->is_gallery], auth()->user());
+        session()->flash('success', $media->is_gallery ? 'أضيفت الصورة إلى معرض الموقع.' : 'أزيلت الصورة من معرض الموقع.');
+    }
+
+    public function deleteMedia(int $id, CmsService $cms): void
+    {
+        Gate::authorize('website.manage');
+        $media = CmsMedia::query()->withCount('featuredContents')->findOrFail($id);
+
+        if ($media->featured_contents_count > 0) {
+            $this->addError('mediaLibrary', 'لا يمكن حذف هذا الوسيط لأنه مستخدم كصورة بارزة في '.$media->featured_contents_count.' محتوى. غيّر الصورة البارزة أولًا.');
+
+            return;
+        }
+
+        $cms->deleteMedia($media, auth()->user());
+        session()->flash('success', 'تم حذف الوسيط من المكتبة والتخزين.');
+    }
+
     public function handleMessage(int $id, CmsService $cms): void
     {
         Gate::authorize('website.manage');
@@ -149,28 +312,75 @@ class CmsManager extends Component
         session()->flash('success', 'تم تعليم الرسالة كمعالجة.');
     }
 
+    public function reopenMessage(int $id, CmsService $cms): void
+    {
+        Gate::authorize('website.manage');
+        $cms->reopenMessage(ContactMessage::query()->findOrFail($id), auth()->user());
+        session()->flash('success', 'أعيدت الرسالة إلى قائمة المتابعة.');
+    }
+
     public function render(): View
     {
         $contents = CmsContent::query()->with('featuredMedia:id,disk,path,alt_text')
+            ->when($this->contentSearch, function ($query): void {
+                $term = '%'.trim($this->contentSearch).'%';
+                $query->where(fn ($search) => $search
+                    ->where('title', 'like', $term)
+                    ->orWhere('slug', 'like', $term)
+                    ->orWhere('excerpt', 'like', $term));
+            })
             ->when($this->typeFilter, fn ($query) => $query->where('type', $this->typeFilter))
             ->when($this->statusFilter, fn ($query) => $query->where('status', $this->statusFilter))
+            ->orderBy('sort_order')->latest()->limit(150)->get();
+
+        $media = CmsMedia::query()->withCount('featuredContents')
+            ->when($this->mediaSearch, function ($query): void {
+                $term = '%'.trim($this->mediaSearch).'%';
+                $query->where(fn ($search) => $search
+                    ->where('title', 'like', $term)
+                    ->orWhere('original_name', 'like', $term)
+                    ->orWhere('alt_text', 'like', $term));
+            })
+            ->when($this->mediaKindFilter, fn ($query) => $query->where('kind', $this->mediaKindFilter))
+            ->orderBy('sort_order')->latest()->limit(150)->get();
+
+        $messages = ContactMessage::query()
+            ->when($this->messageSearch, function ($query): void {
+                $term = '%'.trim($this->messageSearch).'%';
+                $query->where(fn ($search) => $search
+                    ->where('name', 'like', $term)
+                    ->orWhere('subject', 'like', $term)
+                    ->orWhere('phone', 'like', $term)
+                    ->orWhere('email', 'like', $term));
+            })
+            ->when($this->messageStatusFilter, fn ($query) => $query->where('status', $this->messageStatusFilter))
             ->latest()->limit(150)->get();
 
         return view('livewire.cms-manager', [
             'types' => $this->types(), 'contents' => $contents,
-            'media' => CmsMedia::query()->latest()->limit(150)->get(),
-            'mediaChoices' => CmsMedia::query()->where('kind', 'image')->latest()->get(['id', 'title', 'original_name']),
-            'messages' => ContactMessage::query()->latest()->limit(150)->get(),
+            'media' => $media,
+            'mediaChoices' => CmsMedia::query()->where('kind', 'image')->orderBy('sort_order')->latest()->get(),
+            'messages' => $messages,
             'statusCounts' => CmsContent::query()->selectRaw('status, count(*) as aggregate')->groupBy('status')->pluck('aggregate', 'status'),
+            'typeCounts' => CmsContent::query()->selectRaw('type, count(*) as aggregate')->groupBy('type')->pluck('aggregate', 'type'),
+            'mediaCount' => CmsMedia::query()->count(),
+            'galleryCount' => CmsMedia::query()->where('is_gallery', true)->count(),
             'newMessages' => ContactMessage::query()->where('status', 'new')->count(),
         ]);
     }
 
     private function resetContentForm(): void
     {
-        $this->reset('editingContentId', 'contentTitle', 'contentSlug', 'contentExcerpt', 'contentBody', 'contentPublishedAt', 'contentFeaturedMediaId', 'contentMetaTitle', 'contentMetaDescription', 'contentFeatured', 'contentSortOrder', 'showContentForm');
+        $this->reset('editingContentId', 'contentTitle', 'contentSlug', 'contentExcerpt', 'contentBody', 'contentPublishedAt', 'contentFeaturedMediaId', 'contentImageFile', 'contentImageAlt', 'contentMetaTitle', 'contentMetaDescription', 'contentFeatured', 'contentSortOrder', 'showContentForm');
         $this->contentType = 'page';
         $this->contentStatus = 'draft';
+        $this->resetValidation();
+    }
+
+    private function resetMediaEditor(): void
+    {
+        $this->reset('editingMediaId', 'showMediaEditor', 'editMediaTitle', 'editMediaAlt', 'editMediaCaption', 'editMediaGallery', 'editMediaSortOrder');
+        $this->resetValidation();
     }
 
     private function types(): array

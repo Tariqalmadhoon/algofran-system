@@ -5,7 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="user-id" content="{{ auth()->id() }}">
-    <title>{{ $title ?? config('app.name') }}</title>
+    <title>{{ $title ? $title.' | '.config('app.name') : config('app.name') }}</title>
+    <link rel="icon" type="image/jpeg" href="{{ asset(config('app.logo')) }}">
+    <script>
+        try {
+            document.documentElement.dataset.sidebarCollapsed = JSON.parse(localStorage.getItem('alquran-sidebar-collapsed') ?? 'false') ? 'true' : 'false';
+        } catch (error) {
+            document.documentElement.dataset.sidebarCollapsed = 'false';
+        }
+    </script>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
 </head>
@@ -13,6 +21,7 @@
     $pageTitle = match (true) {
         request()->routeIs('dashboard') => 'لوحة المعلومات',
         request()->routeIs('organization.*') => 'الهيكل التنظيمي',
+        request()->routeIs('access.*') => 'الحسابات والصلاحيات',
         request()->routeIs('students.*') => 'إدارة الطلاب',
         request()->routeIs('teacher.daily') => 'التسجيل اليومي',
         request()->routeIs('academic.*') => 'الإدارة الأكاديمية',
@@ -25,12 +34,26 @@
         default => config('app.name'),
     };
     $unreadNotifications = auth()->user()->unreadNotifications()->count();
+    $teachingProfile = auth()->user()->can('recitations.create')
+        ? auth()->user()->teacherProfile()->where('active', true)->with('center:id,name')->first()
+        : null;
+    $assignedTeachingHalaqas = $teachingProfile
+        ? $teachingProfile->assignments()
+            ->whereDate('starts_at', '<=', today())
+            ->where(fn ($dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', today()))
+            ->whereHas('halaqa', fn ($halaqa) => $halaqa->where('active', true))
+            ->with('halaqa:id,name')
+            ->get()
+            ->pluck('halaqa')
+            ->filter()
+            ->unique('id')
+        : collect();
 @endphp
 <body class="min-h-screen overflow-x-hidden bg-[#f5f7f6] text-slate-900 antialiased">
     <div
         x-data="{
             sidebarOpen: false,
-            sidebarCollapsed: JSON.parse(localStorage.getItem('alquran-sidebar-collapsed') ?? 'false'),
+            sidebarCollapsed: document.documentElement.dataset.sidebarCollapsed === 'true',
             userMenu: false,
             notificationMenu: false,
             unreadNotifications: {{ $unreadNotifications }},
@@ -45,7 +68,7 @@
                 setTimeout(() => this.realtimeNotification = null, 6500);
             }
         }"
-        x-init="$watch('sidebarCollapsed', value => localStorage.setItem('alquran-sidebar-collapsed', JSON.stringify(value)))"
+        x-init="$watch('sidebarCollapsed', value => { document.documentElement.dataset.sidebarCollapsed = value ? 'true' : 'false'; localStorage.setItem('alquran-sidebar-collapsed', JSON.stringify(value)); })"
         @keydown.escape.window="sidebarOpen = false; userMenu = false; notificationMenu = false"
         @alquran:notification.window="receiveNotification($event)"
         class="min-h-screen"
@@ -53,16 +76,16 @@
         <div x-cloak x-show="sidebarOpen" x-transition.opacity class="fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-sm lg:hidden" @click="sidebarOpen = false"></div>
 
         <aside
-            :class="[sidebarOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0', sidebarCollapsed ? 'lg:w-24' : 'lg:w-72']"
-            class="fixed inset-y-0 right-0 z-50 flex w-72 flex-col overflow-hidden bg-[linear-gradient(165deg,#073b31_0%,#0b513e_52%,#08372f_100%)] text-white shadow-2xl shadow-emerald-950/25 transition-all duration-300 ease-out"
+            :class="sidebarOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'"
+            class="app-sidebar-shell fixed inset-y-0 right-0 z-50 flex flex-col overflow-hidden bg-[linear-gradient(165deg,#073b31_0%,#0b513e_52%,#08372f_100%)] text-white shadow-2xl shadow-emerald-950/25 transition-[transform,width] duration-300 ease-out"
         >
             <div class="pointer-events-none absolute -left-20 top-20 size-56 rounded-full bg-emerald-300/7 blur-3xl"></div>
             <div class="flex h-20 shrink-0 items-center gap-3 border-b border-white/10 px-5" :class="sidebarCollapsed ? 'lg:justify-center lg:px-2' : ''">
                 <a href="{{ route('dashboard') }}" class="flex min-w-0 items-center gap-3">
-                    <span class="grid size-11 shrink-0 place-items-center rounded-2xl bg-white text-xl font-black text-emerald-900 shadow-lg shadow-black/10">ق</span>
+                    <x-brand-logo size="xs" />
                     <span x-show="!sidebarCollapsed" x-transition.opacity.duration.200ms class="min-w-0 lg:block">
-                        <span class="block truncate text-sm font-extrabold">مركز القرآن الكريم</span>
-                        <span class="block truncate pt-0.5 text-[11px] text-emerald-100/65">نظام الإدارة المؤسسية</span>
+                        <span class="block max-w-48 text-sm font-extrabold leading-5">{{ config('app.name') }}</span>
+                        <span class="block truncate pt-0.5 text-[10px] text-emerald-100/65">نظام الإدارة والمتابعة المؤسسية</span>
                     </span>
                 </a>
                 <button type="button" class="mr-auto rounded-xl p-2 text-emerald-100/70 hover:bg-white/10 hover:text-white lg:hidden" @click="sidebarOpen = false" aria-label="إغلاق القائمة">
@@ -70,11 +93,47 @@
                 </button>
             </div>
 
+            @if($teachingProfile)
+                <div class="mx-3 mt-3 rounded-2xl border border-white/10 bg-white/[.07] p-3" :class="sidebarCollapsed ? 'lg:p-2' : ''" title="{{ $teachingProfile->center?->name }} — {{ $assignedTeachingHalaqas->pluck('name')->join('، ') }}">
+                    <div class="flex items-center gap-3" :class="sidebarCollapsed ? 'lg:justify-center' : ''">
+                        <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-300/15 text-emerald-100"><x-islamic-icon name="mosque" class="size-5" /></span>
+                        <span x-show="!sidebarCollapsed" x-transition.opacity class="min-w-0">
+                            <span class="block text-[10px] font-black tracking-wider text-emerald-200/70">أنت تعمل داخل</span>
+                            <span class="mt-0.5 block truncate text-xs font-black text-white">{{ $teachingProfile->center?->name ?? config('app.name') }}</span>
+                        </span>
+                    </div>
+                    <div x-show="!sidebarCollapsed" x-transition.opacity class="mt-3 space-y-1.5 border-t border-white/10 pt-3">
+                        @forelse($assignedTeachingHalaqas as $workHalaqa)
+                            <a href="{{ route('teacher.daily') }}" class="flex items-center gap-2 rounded-xl bg-emerald-950/25 px-2.5 py-2 text-[11px] font-bold text-emerald-50 transition hover:bg-white/10"><span class="size-1.5 shrink-0 rounded-full bg-emerald-300"></span><span class="truncate">{{ $workHalaqa->name }}</span></a>
+                        @empty
+                            <p class="text-[10px] leading-5 text-amber-200/80">بانتظار إسناد حلقة رسمية</p>
+                        @endforelse
+                    </div>
+                </div>
+            @endif
+
             <nav class="relative flex-1 overflow-y-auto overflow-x-hidden px-3 pb-5" aria-label="التنقل الرئيسي">
                 <p class="sidebar-section" x-show="!sidebarCollapsed">نظرة عامة</p>
                 <a class="sidebar-link group {{ request()->routeIs('dashboard') ? 'sidebar-link-active' : '' }}" href="{{ route('dashboard') }}" title="لوحة المعلومات">
                     <span class="sidebar-icon"><x-nav-icon name="home" /></span><span x-show="!sidebarCollapsed" x-transition.opacity>لوحة المعلومات</span>
                 </a>
+
+                @if($teachingProfile)
+                    <p class="sidebar-section" x-show="!sidebarCollapsed">مساحتي كمحفّظ</p>
+                    <div class="mb-2 space-y-1 rounded-2xl border border-emerald-300/15 bg-emerald-950/20 p-1.5">
+                        <a class="sidebar-link group {{ request()->routeIs('teacher.daily') ? 'sidebar-link-active' : '' }}" href="{{ route('teacher.daily') }}" title="التسجيل اليومي">
+                            <span class="sidebar-icon"><x-nav-icon name="daily" /></span>
+                            <span x-show="!sidebarCollapsed" x-transition.opacity class="min-w-0 flex-1 truncate">التسجيل اليومي</span>
+                            <span x-show="!sidebarCollapsed" class="rounded-full bg-emerald-300/15 px-2 py-0.5 text-[9px] font-black text-emerald-100">اليوم</span>
+                        </a>
+                        @can('alerts.view')
+                            <a class="sidebar-link group {{ request()->routeIs('alerts.*') && request('scope') === 'teaching' ? 'sidebar-link-active' : '' }}" href="{{ route('alerts.index', ['scope' => 'teaching']) }}" title="تنبيهات طلاب حلقاتي">
+                                <span class="sidebar-icon"><x-nav-icon name="alerts" /></span>
+                                <span x-show="!sidebarCollapsed" x-transition.opacity>تنبيهات طلاب حلقاتي</span>
+                            </a>
+                        @endcan
+                    </div>
+                @endif
 
                 <p class="sidebar-section" x-show="!sidebarCollapsed">الإدارة والمتابعة</p>
                 @can('organization.view')
@@ -82,25 +141,27 @@
                         <span class="sidebar-icon"><x-nav-icon name="organization" /></span><span x-show="!sidebarCollapsed" x-transition.opacity>الهيكل التنظيمي</span>
                     </a>
                 @endcan
+                @if(auth()->user()->hasRole('super-admin'))
+                    <a class="sidebar-link group {{ request()->routeIs('access.*') ? 'sidebar-link-active' : '' }}" href="{{ route('access.index') }}" title="الحسابات والصلاحيات">
+                        <span class="sidebar-icon"><x-nav-icon name="access" /></span><span x-show="!sidebarCollapsed" x-transition.opacity>الحسابات والصلاحيات</span>
+                    </a>
+                @endif
                 @can('students.view')
                     <a class="sidebar-link group {{ request()->routeIs('students.*') ? 'sidebar-link-active' : '' }}" href="{{ route('students.index') }}" title="الطلاب">
                         <span class="sidebar-icon"><x-nav-icon name="students" /></span><span x-show="!sidebarCollapsed" x-transition.opacity>الطلاب</span>
                     </a>
                 @endcan
-                @if(auth()->user()->can('recitations.create') && auth()->user()->teacherProfile?->active)
-                    <a class="sidebar-link group {{ request()->routeIs('teacher.daily') ? 'sidebar-link-active' : '' }}" href="{{ route('teacher.daily') }}" title="التسجيل اليومي">
-                        <span class="sidebar-icon"><x-nav-icon name="daily" /></span><span x-show="!sidebarCollapsed" x-transition.opacity>التسجيل اليومي</span>
-                    </a>
-                @endif
                 @can('courses.manage')
                     <a class="sidebar-link group {{ request()->routeIs('academic.*') ? 'sidebar-link-active' : '' }}" href="{{ route('academic.index') }}" title="الإدارة الأكاديمية">
                         <span class="sidebar-icon"><x-nav-icon name="academic" /></span><span x-show="!sidebarCollapsed" x-transition.opacity>الإدارة الأكاديمية</span>
                     </a>
                 @endcan
                 @can('alerts.view')
-                    <a class="sidebar-link group {{ request()->routeIs('alerts.*') ? 'sidebar-link-active' : '' }}" href="{{ route('alerts.index') }}" title="التنبيهات">
-                        <span class="sidebar-icon"><x-nav-icon name="alerts" /></span><span x-show="!sidebarCollapsed" x-transition.opacity>التنبيهات</span>
-                    </a>
+                    @if(! $teachingProfile || auth()->user()->can('alerts.manage'))
+                        <a class="sidebar-link group {{ request()->routeIs('alerts.*') && request('scope') !== 'teaching' ? 'sidebar-link-active' : '' }}" href="{{ route('alerts.index') }}" title="مركز التنبيهات">
+                            <span class="sidebar-icon"><x-nav-icon name="alerts" /></span><span x-show="!sidebarCollapsed" x-transition.opacity>مركز التنبيهات</span>
+                        </a>
+                    @endif
                 @endcan
 
                 <p class="sidebar-section" x-show="!sidebarCollapsed">التخطيط والتقارير</p>
@@ -123,17 +184,23 @@
 
             <div class="relative border-t border-white/10 p-3">
                 <a href="{{ route('profile.edit') }}" class="flex items-center gap-3 rounded-2xl p-2 hover:bg-white/10" :class="sidebarCollapsed ? 'lg:justify-center' : ''">
-                    <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-200/15 text-sm font-black text-emerald-50">{{ mb_substr(auth()->user()->name, 0, 1) }}</span>
+                    <span class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-emerald-200/15 text-sm font-black text-emerald-50">
+                        @if(auth()->user()->avatar)
+                            <img src="{{ route('private-files.preview', auth()->user()->avatar) }}" alt="" class="size-full object-cover">
+                        @else
+                            {{ mb_substr(auth()->user()->name, 0, 1) }}
+                        @endif
+                    </span>
                     <span x-show="!sidebarCollapsed" x-transition.opacity class="min-w-0">
                         <span class="block truncate text-sm font-bold">{{ auth()->user()->name }}</span>
-                        <span class="block truncate text-[11px] text-emerald-100/60">{{ auth()->user()->getRoleNames()->first() ?? 'مستخدم' }}</span>
+                        <span class="block truncate text-[11px] text-emerald-100/60">{{ $teachingProfile && auth()->user()->hasRole('super-admin') ? 'مدير النظام · محفّظ' : ($teachingProfile && auth()->user()->hasRole('center-manager') ? 'مدير مركز · محفّظ' : (auth()->user()->getRoleNames()->first() ?? 'مستخدم')) }}</span>
                     </span>
                 </a>
             </div>
         </aside>
 
-        <div :class="sidebarCollapsed ? 'lg:pr-24' : 'lg:pr-72'" class="min-h-screen transition-[padding] duration-300 ease-out">
-            <header class="sticky top-0 z-30 h-20 border-b border-slate-200/75 bg-white/88 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
+        <div class="app-content-shell min-h-screen transition-[padding] duration-300 ease-out">
+            <header class="app-topbar-shell sticky top-0 z-30 h-20 border-b border-slate-200/75 bg-white/88 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
                 <div class="mx-auto flex h-full max-w-[1600px] items-center gap-3">
                     <button type="button" class="btn-ghost" @click="toggleSidebar()" :aria-label="sidebarCollapsed ? 'توسيع القائمة الجانبية' : 'طي القائمة الجانبية'">
                         <x-nav-icon name="menu" class="size-5 lg:hidden" />
@@ -167,7 +234,13 @@
 
                         <div class="relative" @click.outside="userMenu = false">
                             <button type="button" class="flex items-center gap-2 rounded-2xl p-1.5 hover:bg-slate-100" @click="userMenu = !userMenu; notificationMenu = false">
-                                <span class="grid size-9 place-items-center rounded-xl bg-emerald-100 text-sm font-black text-emerald-800">{{ mb_substr(auth()->user()->name, 0, 1) }}</span>
+                                <span class="grid size-9 place-items-center overflow-hidden rounded-xl bg-emerald-100 text-sm font-black text-emerald-800">
+                                    @if(auth()->user()->avatar)
+                                        <img src="{{ route('private-files.preview', auth()->user()->avatar) }}" alt="" class="size-full object-cover">
+                                    @else
+                                        {{ mb_substr(auth()->user()->name, 0, 1) }}
+                                    @endif
+                                </span>
                                 <span class="hidden max-w-36 truncate text-sm font-bold text-slate-700 md:block">{{ auth()->user()->name }}</span>
                                 <svg class="hidden size-4 text-slate-400 md:block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
                             </button>
@@ -181,21 +254,21 @@
             </header>
 
             <main class="mx-auto max-w-[1600px] px-4 py-7 sm:px-6 lg:px-8 lg:py-9">
-                <div x-cloak x-show="realtimeNotification" x-transition class="fixed left-4 top-24 z-[70] w-[min(24rem,calc(100vw-2rem))] rounded-2xl border border-emerald-200 bg-white p-4 shadow-2xl shadow-emerald-950/15" role="status">
-                    <p class="text-sm font-black text-slate-900" x-text="realtimeNotification?.title ?? 'إشعار جديد'"></p>
-                    <p class="mt-1 text-xs leading-5 text-slate-500" x-text="realtimeNotification?.message"></p>
-                    <a x-show="realtimeNotification?.url" :href="realtimeNotification?.url" class="mt-2 inline-block text-xs font-black text-emerald-700">فتح التفاصيل</a>
+                <x-flash-messages />
+                <div x-cloak x-show="realtimeNotification" x-transition:enter="transition duration-500 ease-out" x-transition:enter-start="translate-x-6 opacity-0" x-transition:leave="transition duration-250 ease-in" x-transition:leave-end="translate-x-5 opacity-0" class="feedback-alert fixed left-4 top-24 z-[84] w-[min(25rem,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-sky-200/80 bg-white shadow-[0_24px_70px_-35px_rgba(15,23,42,.35)]" role="status">
+                    <span class="absolute inset-y-0 right-0 w-1.5 bg-sky-500"></span>
+                    <div class="flex items-start gap-3.5 p-4 pr-5">
+                        <span class="grid size-11 shrink-0 place-items-center rounded-2xl bg-sky-50 text-sky-700"><x-nav-icon name="bell" /></span>
+                        <div class="min-w-0 flex-1 pt-0.5"><p class="text-sm font-black text-slate-900" x-text="realtimeNotification?.title ?? 'إشعار جديد'"></p><p class="mt-1 text-xs font-medium leading-6 text-slate-600" x-text="realtimeNotification?.message"></p><a x-show="realtimeNotification?.url" :href="realtimeNotification?.url" class="mt-2 inline-flex text-xs font-black text-sky-700">فتح التفاصيل ←</a></div>
+                        <button type="button" @click="realtimeNotification = null" class="grid size-8 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-slate-100" aria-label="إغلاق التنبيه">×</button>
+                    </div>
                 </div>
-                @if (session('success'))
-                    <div x-data="{ show: true }" x-init="setTimeout(() => show = false, 4500)" x-show="show" x-transition class="mb-6 flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800 shadow-sm" role="status"><span>{{ session('success') }}</span><button type="button" @click="show = false" class="p-1 text-emerald-600">×</button></div>
-                @endif
-                @if (session('error'))
-                    <div class="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800" role="alert">{{ session('error') }}</div>
-                @endif
-                <div class="animate-[fade-in_.35s_ease-out]">{{ $slot }}</div>
+                <div data-page-reveal>{{ $slot }}</div>
             </main>
         </div>
+        <x-confirm-dialog />
     </div>
+    @stack('scripts-before-livewire')
     @livewireScripts
     @stack('scripts')
 </body>

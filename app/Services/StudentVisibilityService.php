@@ -13,8 +13,16 @@ class StudentVisibilityService
     {
         $query = Student::query();
 
-        if ($user->hasAnyRole(['super-admin', 'center-manager', 'academic-supervisor', 'registrar'])) {
+        if ($user->hasRole('super-admin')) {
             return $query;
+        }
+
+        if ($user->hasAnyRole(['center-manager', 'academic-supervisor', 'registrar'])) {
+            $centerId = $user->staffProfile?->center_id;
+
+            return $centerId
+                ? $query->whereHas('currentHalaqa', fn (Builder $halaqa) => $halaqa->where('center_id', $centerId))
+                : $query->whereRaw('1 = 0');
         }
 
         if ($user->hasRole('teacher')) {
@@ -33,7 +41,7 @@ class StudentVisibilityService
             return $query->where('user_id', $user->id);
         }
 
-        return $user->can('students.view') ? $query : $query->whereRaw('1 = 0');
+        return $query->whereRaw('1 = 0');
     }
 
     public function canView(User $user, Student $student): bool

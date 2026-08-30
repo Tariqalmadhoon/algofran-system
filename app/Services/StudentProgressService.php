@@ -17,7 +17,10 @@ class StudentProgressService
 {
     private const TOTAL_AYAHS = 6236;
 
-    public function __construct(private readonly SettingsService $settings) {}
+    public function __construct(
+        private readonly SettingsService $settings,
+        private readonly MemorizationJourneyService $memorizationJourney,
+    ) {}
 
     public function snapshot(Student $student, CarbonInterface|string|null $asOf = null): StudentProgressSnapshot
     {
@@ -60,7 +63,9 @@ class StudentProgressService
             ->groupBy('juz')
             ->get();
         $completedSurahs = $surahRanges->filter(fn ($range) => $this->isCovered($intervals, (int) $range->range_start, (int) $range->range_end))->count();
-        $completedJuz = $juzRanges->filter(fn ($range) => $this->isCovered($intervals, (int) $range->range_start, (int) $range->range_end))->count();
+        $strictCompletedJuz = $juzRanges->filter(fn ($range) => $this->isCovered($intervals, (int) $range->range_start, (int) $range->range_end))->count();
+        $journey = $this->memorizationJourney->calculate($student, $date);
+        $completedJuz = max($strictCompletedJuz, (int) $journey['completed_juz']);
 
         $itemQuery = RecitationItem::query()
             ->whereHas('dailyRecord', fn ($query) => $query->where('student_id', $student->id)->whereDate('record_date', '<=', $date));
@@ -150,6 +155,8 @@ class StudentProgressService
                 'last_memorization_at' => $lastMemorizationAt,
                 'days_since_last_memorization' => $lastMemorizationAt ? Carbon::parse($lastMemorizationAt)->startOfDay()->diffInDays($date->copy()->startOfDay()) : null,
                 'days_since_last_revision' => $lastRevisionAt ? Carbon::parse($lastRevisionAt)->startOfDay()->diffInDays($date->copy()->startOfDay()) : null,
+                'strict_completed_juz' => $strictCompletedJuz,
+                'memorization_journey' => $journey,
             ],
         ];
     }

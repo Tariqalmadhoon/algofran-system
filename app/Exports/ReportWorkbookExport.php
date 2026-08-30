@@ -10,6 +10,10 @@ class ReportWorkbookExport implements WithMultipleSheets
 
     public function sheets(): array
     {
+        if (($this->report['layout'] ?? null) === 'comprehensive_students') {
+            return [new ComprehensiveStudentReportExport($this->report['rows'])];
+        }
+
         $sheets = $this->report['sheets'] ?? [[
             'title' => $this->report['title'], 'headings' => $this->report['headings'], 'rows' => $this->report['rows'],
         ]];

@@ -17,7 +17,7 @@ class MetaController extends Controller
                 'authentication' => 'Bearer',
                 'locale' => 'ar',
                 'direction' => 'rtl',
-                'two_factor_challenge' => true,
+                'two_factor_challenge' => (bool) config('system.identity.two_factor_enabled', false),
             ],
         ]);
     }

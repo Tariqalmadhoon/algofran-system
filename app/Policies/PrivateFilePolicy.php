@@ -17,12 +17,22 @@ class PrivateFilePolicy
         $owner = $file->owner;
         $category = $file->metadata['category'] ?? null;
 
+        if ($owner instanceof User) {
+            return $owner->is($user) || $user->can('private-files.view');
+        }
+
         if ($owner instanceof Guardian) {
             if ($owner->user_id === $user->id) {
                 return true;
             }
 
-            return $user->can('guardian.private-data.view');
+            if ($user->can('guardian.private-data.view')) {
+                return true;
+            }
+
+            return $owner->students()->get()->contains(
+                fn (Student $student) => $user->can('update', $student),
+            );
         }
 
         if ($owner instanceof Student) {
@@ -31,7 +41,7 @@ class PrivateFilePolicy
             }
 
             if (in_array($category, ['identity_document', 'student-identity'], true)) {
-                return $user->can('guardian.private-data.view');
+                return $user->can('guardian.private-data.view') || $user->can('update', $owner);
             }
 
             return $user->can('view', $owner);

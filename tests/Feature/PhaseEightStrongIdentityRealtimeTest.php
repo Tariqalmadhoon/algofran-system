@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Branch;
 use App\Models\Center;
 use App\Models\Halaqa;
+use App\Models\StaffProfile;
 use App\Models\Student;
 use App\Models\StudentProgressSnapshot;
 use App\Models\User;
@@ -29,7 +30,41 @@ class PhaseEightStrongIdentityRealtimeTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        config(['system.identity.two_factor_enabled' => true]);
         $this->seed(RolesAndPermissionsSeeder::class);
+    }
+
+    public function test_two_factor_can_be_temporarily_disabled_without_removing_existing_setup(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'paused-two-factor@example.com',
+            'password' => Hash::make('PausedTwoFactor123!'),
+        ]);
+        $user->assignRole('center-manager');
+        $this->completeTwoFactorAuthentication($user);
+        $secret = $user->getRawOriginal('two_factor_secret');
+
+        config(['system.identity.two_factor_enabled' => false]);
+
+        $this->post(route('login.store'), [
+            'email' => $user->email,
+            'password' => 'PausedTwoFactor123!',
+        ])->assertRedirect(route('dashboard'));
+
+        $this->withSession(['auth.password_confirmed_at' => time()])
+            ->get(route('profile.security'))
+            ->assertOk()
+            ->assertDontSee('المصادقة الثنائية');
+
+        $this->withSession(['auth.password_confirmed_at' => time()])
+            ->post(route('profile.two-factor.enable'))
+            ->assertNotFound();
+
+        $this->getJson('/api/v1/meta')
+            ->assertOk()
+            ->assertJsonPath('data.two_factor_challenge', false);
+
+        $this->assertSame($secret, $user->fresh()->getRawOriginal('two_factor_secret'));
     }
 
     public function test_sensitive_role_is_forced_to_configure_two_factor_authentication(): void
@@ -238,6 +273,14 @@ class PhaseEightStrongIdentityRealtimeTest extends TestCase
         $manager = User::factory()->create();
         $manager->assignRole('center-manager');
         [$student, $snapshot] = $this->studentWithCriticalSnapshot();
+        StaffProfile::query()->create([
+            'user_id' => $manager->id,
+            'center_id' => $student->currentHalaqa->center_id,
+            'branch_id' => $student->currentHalaqa->branch_id,
+            'employee_number' => 'STF-ALERT-MANAGER',
+            'job_title' => 'مدير المركز',
+            'active' => true,
+        ]);
 
         app(StudentAlertEngine::class)->evaluate($student, $snapshot);
         app(StudentAlertEngine::class)->evaluate($student, $snapshot);

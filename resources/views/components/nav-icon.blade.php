@@ -4,6 +4,7 @@
     @switch($name)
         @case('home') <path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/> @break
         @case('organization') <rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h2m-2 4h2m-2 4h2m6-8h2m-2 4h2m-2 4h2M11 20V7h2v13"/> @break
+        @case('access') <path d="M12 3 4.5 6v5.5c0 4.6 3.2 7.9 7.5 9.5 4.3-1.6 7.5-4.9 7.5-9.5V6L12 3Z"/><path d="M9 11a3 3 0 1 1 6 0c0 1.2-.7 2.2-1.7 2.7V17h-2.6v-3.3A3 3 0 0 1 9 11Z"/> @break
         @case('students') <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/> @break
         @case('daily') <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/><path d="M9 7h7m-7 4h7"/> @break
         @case('academic') <path d="m2 10 10-5 10 5-10 5L2 10Z"/><path d="M6 12.5V17c3 2.5 9 2.5 12 0v-4.5M22 10v6"/> @break

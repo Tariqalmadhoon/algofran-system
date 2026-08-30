@@ -14,6 +14,7 @@ use App\Http\Controllers\SecurityController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\TeacherDailyController;
 use App\Http\Middleware\EnsureStrongIdentity;
+use App\Http\Middleware\EnsureSuperAdministrator;
 use App\Http\Middleware\EnsureUserIsActive;
 use Illuminate\Support\Facades\Route;
 
@@ -55,6 +56,9 @@ Route::middleware(['auth', EnsureUserIsActive::class, 'auth.session', EnsureStro
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('/profile/password', [ProfileController::class, 'password'])->name('profile.password');
+    Route::post('/profile/password/check', [ProfileController::class, 'checkPassword'])
+        ->middleware('throttle:20,1')
+        ->name('profile.password.check');
 
     Route::middleware('password.confirm')->group(function () {
         Route::get('/profile/security', [SecurityController::class, 'show'])->name('profile.security');
@@ -69,6 +73,10 @@ Route::middleware(['auth', EnsureUserIsActive::class, 'auth.session', EnsureStro
     Route::view('/organization', 'organization')
         ->middleware('can:organization.view')
         ->name('organization.index');
+
+    Route::view('/access-control', 'access.index')
+        ->middleware(EnsureSuperAdministrator::class)
+        ->name('access.index');
 
     Route::get('/students', [StudentController::class, 'index'])->name('students.index');
     Route::get('/students/{student}', [StudentController::class, 'show'])->name('students.show');
@@ -95,4 +103,6 @@ Route::middleware(['auth', EnsureUserIsActive::class, 'auth.session', EnsureStro
 
     Route::get('/private-files/{privateFile}', [PrivateFileController::class, 'show'])
         ->name('private-files.show');
+    Route::get('/private-files/{privateFile}/preview', [PrivateFileController::class, 'preview'])
+        ->name('private-files.preview');
 });

@@ -120,8 +120,14 @@ class RecordStudentDailyRecordAction
 
     private function ensureActorCanRecord(User $actor, TeacherProfile $teacher, Halaqa $halaqa, Carbon $date): void
     {
-        if ($actor->hasRole('teacher') && $teacher->user_id !== $actor->id) {
+        $actorTeacherProfile = $actor->teacherProfile;
+
+        if ($actorTeacherProfile && (int) $actorTeacherProfile->id !== (int) $teacher->id) {
             throw ValidationException::withMessages(['teacher' => 'لا يمكنك التسجيل باسم محفظ آخر.']);
+        }
+
+        if (! $actor->active || $actor->archived_at || ! $teacher->active || ! $teacher->user?->active || ! $halaqa->active) {
+            throw ValidationException::withMessages(['halaqa_id' => 'الحساب التعليمي أو الحلقة غير فعّال حاليًا.']);
         }
 
         $assigned = $halaqa->teacherAssignments()

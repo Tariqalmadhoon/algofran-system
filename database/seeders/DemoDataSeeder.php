@@ -53,7 +53,7 @@ class DemoDataSeeder extends Seeder
         );
         $teacherUser->syncRoles(['teacher']);
 
-        $center = Center::query()->updateOrCreate(['code' => 'MAIN'], ['name' => 'مركز الفرقان', 'phone' => '0599000000', 'address' => 'الفرع الرئيس', 'active' => true]);
+        $center = Center::query()->updateOrCreate(['code' => 'MAIN'], ['name' => 'مركز الغفران لتحفيظ القرآن الكريم', 'phone' => '0599000000', 'address' => 'الفرع الرئيس', 'active' => true]);
         $branch = Branch::query()->updateOrCreate(['center_id' => $center->id, 'code' => 'B1'], ['name' => 'الفرع الرئيس', 'phone' => '0599000001', 'active' => true]);
         $teacher = TeacherProfile::query()->updateOrCreate(
             ['user_id' => $teacherUser->id],
@@ -230,7 +230,7 @@ class DemoDataSeeder extends Seeder
         ])->map(fn (array $item) => CmsMedia::query()->updateOrCreate(['path' => $item['path']], $item + ['disk' => 'public', 'original_name' => basename($item['path']), 'mime_type' => 'image/svg+xml', 'size' => 0, 'kind' => 'image', 'is_gallery' => true, 'uploaded_by' => $admin->id]));
 
         $content = [
-            ['type' => 'page', 'slug' => 'about', 'title' => 'عن مركز القرآن الكريم', 'excerpt' => 'مؤسسة تعليمية تربوية تجمع بين الإتقان والرعاية والنمو.', 'body' => "نعمل على تعليم القرآن الكريم حفظًا وتلاوةً وتجويدًا، ضمن منهجية واضحة تراعي الفروق الفردية وتربط الطالب بمعلمه وأسرته.\n\nنؤمن بأن الجودة تبدأ من المتابعة الدقيقة، وتكتمل بالقدوة والرعاية التربوية.", 'featured_media_id' => $media[0]->id],
+            ['type' => 'page', 'slug' => 'about', 'title' => 'عن مركز الغفران لتحفيظ القرآن الكريم', 'excerpt' => 'مؤسسة تعليمية تربوية تجمع بين الإتقان والرعاية والنمو.', 'body' => "نعمل على تعليم القرآن الكريم حفظًا وتلاوةً وتجويدًا، ضمن منهجية واضحة تراعي الفروق الفردية وتربط الطالب بمعلمه وأسرته.\n\nنؤمن بأن الجودة تبدأ من المتابعة الدقيقة، وتكتمل بالقدوة والرعاية التربوية.", 'featured_media_id' => $media[0]->id],
             ['type' => 'page', 'slug' => 'programs', 'title' => 'برامجنا القرآنية', 'excerpt' => 'مسارات متنوعة في الحفظ والمراجعة والتجويد تناسب المراحل المختلفة.', 'body' => 'صُممت البرامج لتجمع بين الخطة الواضحة والتقييم المستمر والرعاية الفردية.', 'featured_media_id' => $media[1]->id],
             ['type' => 'announcement', 'slug' => 'registration-open', 'title' => 'فتح باب التسجيل في حلقات الفصل الجديد', 'excerpt' => 'التسجيل متاح الآن للمستويات التأسيسية والمتقدمة.', 'body' => 'تواصل معنا لمعرفة الحلقة والبرنامج الأنسب.', 'featured' => true],
             ['type' => 'news', 'slug' => 'new-quran-semester', 'title' => 'انطلاق الفصل القرآني الجديد', 'excerpt' => 'استقبل المركز طلابه بخطط حفظ ومراجعة محدثة.', 'body' => 'بدأت الحلقات القرآنية فصلها الجديد وسط أجواء إيمانية وتربوية، مع اعتماد خطط فردية تراعي مستوى كل طالب.', 'featured_media_id' => $media[0]->id, 'featured' => true],

@@ -44,4 +44,19 @@ class PrivateFileService
 
         return $file;
     }
+
+    public function delete(PrivateFile $file): void
+    {
+        $oldValues = [
+            'owner_type' => $file->owner_type,
+            'owner_id' => $file->owner_id,
+            'mime_type' => $file->mime_type,
+            'size' => $file->size,
+            'category' => $file->metadata['category'] ?? null,
+        ];
+
+        Storage::disk($file->disk)->delete($file->path);
+        $this->auditLogger->record('private-file.deleted', $file, oldValues: $oldValues);
+        $file->delete();
+    }
 }

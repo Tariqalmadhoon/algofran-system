@@ -9,6 +9,7 @@ use App\Models\Student;
 use App\Services\PrivateFileService;
 use App\Services\StudentVisibilityService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Livewire\Component;
@@ -41,6 +42,10 @@ class StudentsIndex extends Component
 
     public string $contactPhone = '';
 
+    public string $sponsorshipType = '';
+
+    public string $sponsorshipOrganization = '';
+
     public string $registrationDate = '';
 
     public string $status = 'active';
@@ -57,6 +62,7 @@ class StudentsIndex extends Component
     {
         Gate::authorize('viewAny', Student::class);
         $this->registrationDate = today()->toDateString();
+        $this->selectOnlyAssignedHalaqa();
     }
 
     public function updatedSearch(): void
@@ -77,6 +83,7 @@ class StudentsIndex extends Component
     public function save(CreateStudentAction $createStudent, PrivateFileService $privateFiles): void
     {
         Gate::authorize('create', Student::class);
+        $teacherMode = auth()->user()->requiresTeacherAssignmentScope();
 
         $data = $this->validate([
             'studentNumber' => ['required', 'string', 'max:50', 'alpha_dash', 'unique:students,student_number'],
@@ -87,13 +94,21 @@ class StudentsIndex extends Component
             'identityNumber' => ['nullable', 'string', 'max:50', 'unique:students,identity_number'],
             'birthDate' => ['nullable', 'date', 'before:today'],
             'contactPhone' => ['nullable', 'string', 'max:30'],
+            'sponsorshipType' => ['nullable', 'string', 'max:255'],
+            'sponsorshipOrganization' => ['nullable', 'string', 'max:255'],
             'registrationDate' => ['required', 'date'],
             'status' => ['required', Rule::enum(StudentStatus::class)],
-            'halaqaId' => ['nullable', 'exists:halaqas,id'],
+            'halaqaId' => [$teacherMode ? 'required' : 'nullable', 'exists:halaqas,id'],
             'notes' => ['nullable', 'string', 'max:3000'],
             'photo' => ['nullable', 'image', 'max:2048'],
             'identityDocument' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
         ]);
+
+        if ($data['halaqaId'] !== '' && ! $this->availableHalaqas()->whereKey((int) $data['halaqaId'])->exists()) {
+            $this->addError('halaqaId', 'الحلقة المحددة ليست ضمن نطاق حسابك.');
+
+            return;
+        }
 
         $student = $createStudent->execute([
             'student_number' => strtoupper($data['studentNumber']),
@@ -104,6 +119,8 @@ class StudentsIndex extends Component
             'identity_number' => $data['identityNumber'] ?: null,
             'birth_date' => $data['birthDate'] ?: null,
             'contact_phone' => $data['contactPhone'] ?: null,
+            'sponsorship_type' => $data['sponsorshipType'] ?: null,
+            'sponsorship_organization' => $data['sponsorshipOrganization'] ?: null,
             'registration_date' => $data['registrationDate'],
             'status' => $data['status'],
             'halaqa_id' => $data['halaqaId'] ?: null,
@@ -130,7 +147,7 @@ class StudentsIndex extends Component
     public function render(StudentVisibilityService $visibility): View
     {
         $students = $visibility->queryFor(auth()->user())
-            ->with('currentHalaqa:id,name')
+            ->with(['currentHalaqa:id,name', 'photo:id'])
             ->when($this->search, function ($query) {
                 $term = '%'.trim($this->search).'%';
                 $query->where(function ($search) use ($term) {
@@ -147,8 +164,9 @@ class StudentsIndex extends Component
 
         return view('livewire.students-index', [
             'students' => $students,
-            'halaqas' => Halaqa::query()->where('active', true)->orderBy('name')->get(['id', 'name']),
+            'halaqas' => $this->availableHalaqas()->orderBy('name')->get(['id', 'name']),
             'statuses' => StudentStatus::cases(),
+            'teacherMode' => auth()->user()->requiresTeacherAssignmentScope(),
         ]);
     }
 
@@ -156,9 +174,58 @@ class StudentsIndex extends Component
     {
         $this->reset(
             'studentNumber', 'firstName', 'fatherName', 'grandfatherName', 'familyName', 'identityNumber',
-            'birthDate', 'contactPhone', 'status', 'halaqaId', 'notes', 'photo', 'identityDocument',
+            'birthDate', 'contactPhone', 'sponsorshipType', 'sponsorshipOrganization', 'status', 'halaqaId', 'notes', 'photo', 'identityDocument',
         );
         $this->status = StudentStatus::Active->value;
         $this->registrationDate = today()->toDateString();
+        $this->selectOnlyAssignedHalaqa();
+    }
+
+    /** @return Builder<Halaqa> */
+    private function availableHalaqas(): Builder
+    {
+        $query = Halaqa::query()->where('active', true);
+        $user = auth()->user();
+
+        if ($user->hasRole('super-admin')) {
+            return $query;
+        }
+
+        if ($user->requiresTeacherAssignmentScope()) {
+            $teacherId = $user->teacherProfile?->id;
+            if (! $teacherId) {
+                return $query->whereRaw('1 = 0');
+            }
+
+            return $query->whereHas('teacherAssignments', fn (Builder $assignments) => $assignments
+                ->where('teacher_profile_id', $teacherId)
+                ->whereDate('starts_at', '<=', today())
+                ->where(fn (Builder $dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', today())));
+        }
+
+        $centerId = $user->staffProfile?->active ? $user->staffProfile->center_id : null;
+
+        return $centerId ? $query->where('center_id', $centerId) : $query->whereRaw('1 = 0');
+    }
+
+    private function selectOnlyAssignedHalaqa(): void
+    {
+        $teacherId = auth()->user()->teacherProfile?->active
+            ? auth()->user()->teacherProfile->id
+            : null;
+        if (! $teacherId) {
+            return;
+        }
+
+        $assignedHalaqas = Halaqa::query()
+            ->where('active', true)
+            ->whereHas('teacherAssignments', fn (Builder $assignments) => $assignments
+                ->where('teacher_profile_id', $teacherId)
+                ->whereDate('starts_at', '<=', today())
+                ->where(fn (Builder $dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', today())))
+            ->pluck('id');
+        if ($assignedHalaqas->count() === 1) {
+            $this->halaqaId = (string) $assignedHalaqas->first();
+        }
     }
 }

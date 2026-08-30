@@ -2,8 +2,10 @@
 
 namespace App\Livewire;
 
+use App\Models\Center;
 use App\Models\Halaqa;
 use App\Models\ReportExport;
+use App\Models\TeacherProfile;
 use App\Models\UploadedReport;
 use App\Services\AuditLogger;
 use App\Services\PrivateFileService;
@@ -16,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Livewire\Component;
 use Livewire\Features\SupportFileUploads\WithFileUploads;
 use Throwable;
@@ -36,6 +39,12 @@ class ReportCenter extends Component
 
     public string $studentId = '';
 
+    public string $centerId = '';
+
+    public string $comprehensiveScope = 'center';
+
+    public string $teacherProfileId = '';
+
     public string $uploadTitle = '';
 
     public string $uploadType = 'management';
@@ -55,11 +64,45 @@ class ReportCenter extends Component
         Gate::authorize('reports.view');
         $this->dateFrom = today()->startOfMonth()->toDateString();
         $this->dateTo = today()->toDateString();
+        $user = auth()->user();
+        $this->centerId = (string) ($user->staffProfile?->center_id ?? $user->teacherProfile?->center_id ?? '');
+        if ($user->requiresTeacherAssignmentScope()) {
+            $this->comprehensiveScope = 'teacher';
+            $this->teacherProfileId = (string) ($user->teacherProfile?->id ?? '');
+        } elseif ($this->centerId === '' && Center::query()->where('active', true)->count() === 1) {
+            $this->centerId = (string) Center::query()->where('active', true)->value('id');
+        }
+    }
+
+    public function updatedCenterId(): void
+    {
+        $this->reset('teacherProfileId', 'halaqaId', 'studentId');
+        if (auth()->user()->requiresTeacherAssignmentScope()) {
+            $this->teacherProfileId = (string) (auth()->user()->teacherProfile?->id ?? '');
+        }
+    }
+
+    public function updatedComprehensiveScope(string $scope): void
+    {
+        if (auth()->user()->requiresTeacherAssignmentScope()) {
+            $this->comprehensiveScope = 'teacher';
+            $this->teacherProfileId = (string) (auth()->user()->teacherProfile?->id ?? '');
+
+            return;
+        }
+
+        if ($scope === 'center') {
+            $this->teacherProfileId = '';
+        }
     }
 
     public function requestExport(ReportExportService $exports, ReportDataService $reports): void
     {
-        Gate::authorize('reports.export');
+        abort_unless(
+            auth()->user()->can('reports.export')
+                || ($this->reportType === 'student_comprehensive' && $reports->canBuildComprehensive(auth()->user())),
+            403,
+        );
         $this->validateFilters($reports);
         $export = $exports->request($this->reportType, $this->filters(), auth()->user());
         $this->tab = 'exports';
@@ -111,25 +154,95 @@ class ReportCenter extends Component
             ->latest()->limit(100)->get();
 
         return view('livewire.report-center', [
-            'types' => $reports->types(), 'preview' => $preview,
+            'types' => $reports->typesFor(auth()->user()), 'preview' => $preview,
             'students' => $visibility->queryFor(auth()->user())->orderBy('full_name')->limit(1000)->get(['id', 'full_name', 'student_number']),
-            'halaqas' => Halaqa::query()->where('active', true)->orderBy('name')->get(['id', 'name']),
+            'centers' => $this->availableCenters()->orderBy('name')->get(['id', 'name']),
+            'teachers' => $this->availableTeachers()->with('user:id,name')->orderBy('employee_number')->get(),
+            'halaqas' => $this->availableHalaqas()->orderBy('name')->get(['id', 'name']),
             'exports' => ReportExport::query()->where('user_id', auth()->id())->with('privateFile:id,original_name')->latest()->limit(50)->get(),
             'uploadedReports' => $uploaded,
+            'canExportSelectedReport' => auth()->user()->can('reports.export')
+                || ($this->reportType === 'student_comprehensive' && $reports->canBuildComprehensive(auth()->user())),
         ]);
     }
 
     private function filters(): array
     {
-        return array_filter(['date_from' => $this->dateFrom ?: null, 'date_to' => $this->dateTo ?: null, 'halaqa_id' => $this->halaqaId ?: null, 'student_id' => $this->studentId ?: null], fn ($value) => $value !== null);
+        $teacherProfileId = $this->reportType === 'student_comprehensive' && $this->comprehensiveScope === 'teacher'
+            ? (auth()->user()->requiresTeacherAssignmentScope() ? auth()->user()->teacherProfile?->id : $this->teacherProfileId)
+            : null;
+
+        return array_filter([
+            'date_from' => $this->dateFrom ?: null,
+            'date_to' => $this->dateTo ?: null,
+            'center_id' => $this->centerId ?: null,
+            'teacher_profile_id' => $teacherProfileId ?: null,
+            'halaqa_id' => $this->halaqaId ?: null,
+            'student_id' => $this->studentId ?: null,
+        ], fn ($value) => $value !== null);
     }
 
     private function validateFilters(ReportDataService $reports): void
     {
         $this->validate([
-            'reportType' => ['required', Rule::in(array_keys($reports->types()))],
+            'reportType' => ['required', Rule::in(array_keys($reports->typesFor(auth()->user())))],
             'dateFrom' => ['nullable', 'date'], 'dateTo' => ['nullable', 'date', 'after_or_equal:dateFrom'],
+            'centerId' => [Rule::requiredIf($this->reportType === 'student_comprehensive'), 'nullable', 'exists:centers,id'],
+            'comprehensiveScope' => ['required', Rule::in(['center', 'teacher'])],
+            'teacherProfileId' => [Rule::requiredIf($this->reportType === 'student_comprehensive' && $this->comprehensiveScope === 'teacher'), 'nullable', 'exists:teacher_profiles,id'],
             'halaqaId' => ['nullable', 'exists:halaqas,id'], 'studentId' => ['nullable', 'exists:students,id'],
         ]);
+
+        if ($this->centerId !== '' && ! $this->availableCenters()->whereKey((int) $this->centerId)->exists()) {
+            throw ValidationException::withMessages(['centerId' => 'المركز المحدد خارج نطاق حسابك.']);
+        }
+        if ($this->teacherProfileId !== '' && ! $this->availableTeachers()->whereKey((int) $this->teacherProfileId)->exists()) {
+            throw ValidationException::withMessages(['teacherProfileId' => 'المحفّظ المحدد خارج نطاق المركز أو الحساب.']);
+        }
+    }
+
+    /** @return Builder<Center> */
+    private function availableCenters(): Builder
+    {
+        $query = Center::query()->where('active', true);
+        $user = auth()->user();
+        if ($user->hasRole('super-admin')) {
+            return $query;
+        }
+
+        $centerId = $user->staffProfile?->center_id ?? $user->teacherProfile?->center_id;
+
+        return $centerId ? $query->whereKey($centerId) : $query->whereRaw('1 = 0');
+    }
+
+    /** @return Builder<TeacherProfile> */
+    private function availableTeachers(): Builder
+    {
+        $query = TeacherProfile::query()
+            ->where('active', true)
+            ->whereHas('user', fn (Builder $users) => $users->where('active', true)->whereNull('archived_at'));
+        $user = auth()->user();
+        if ($user->requiresTeacherAssignmentScope()) {
+            return $query->whereKey($user->teacherProfile?->id ?? 0);
+        }
+
+        return $this->centerId !== '' ? $query->where('center_id', $this->centerId) : $query->whereRaw('1 = 0');
+    }
+
+    /** @return Builder<Halaqa> */
+    private function availableHalaqas(): Builder
+    {
+        $query = Halaqa::query()->where('active', true);
+        if ($this->centerId !== '') {
+            $query->where('center_id', $this->centerId);
+        }
+        if (auth()->user()->requiresTeacherAssignmentScope()) {
+            $query->whereHas('teacherAssignments', fn (Builder $assignments) => $assignments
+                ->where('teacher_profile_id', auth()->user()->teacherProfile?->id ?? 0)
+                ->whereDate('starts_at', '<=', today())
+                ->where(fn (Builder $dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', today())));
+        }
+
+        return $query;
     }
 }

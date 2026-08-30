@@ -161,12 +161,14 @@ return [
     |
     */
 
-    'features' => [
-        Features::twoFactorAuthentication([
-            'confirm' => true,
-            'confirmPassword' => false,
-            'window' => 1,
-        ]),
-    ],
+    'features' => array_values(array_filter([
+        env('TWO_FACTOR_AUTH_ENABLED', false)
+            ? Features::twoFactorAuthentication([
+                'confirm' => true,
+                'confirmPassword' => false,
+                'window' => 1,
+            ])
+            : null,
+    ])),
 
 ];

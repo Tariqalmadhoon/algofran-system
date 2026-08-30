@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\CalendarEvent;
 use App\Models\Course;
+use App\Models\Halaqa;
 use App\Models\HalaqaSchedule;
 use App\Models\StudentAlert;
 use App\Models\User;
@@ -20,8 +21,13 @@ class CalendarFeedService
     {
         $studentQuery = $this->visibility->queryFor($user);
         $studentIds = (clone $studentQuery)->pluck('id');
-        $halaqaIds = (clone $studentQuery)->whereNotNull('current_halaqa_id')->pluck('current_halaqa_id')->unique();
-        $seesAll = $user->hasAnyRole(['super-admin', 'center-manager', 'academic-supervisor', 'registrar']);
+        $seesAll = $user->hasRole('super-admin');
+        $staffCenterId = $user->hasAnyRole(['center-manager', 'academic-supervisor', 'registrar']) && $user->staffProfile?->active
+            ? $user->staffProfile->center_id
+            : null;
+        $halaqaIds = $staffCenterId
+            ? Halaqa::query()->where('center_id', $staffCenterId)->pluck('id')
+            : (clone $studentQuery)->whereNotNull('current_halaqa_id')->pluck('current_halaqa_id')->unique();
 
         $custom = CalendarEvent::query()
             ->with(['halaqa:id,name', 'course:id,name', 'student:id,full_name'])

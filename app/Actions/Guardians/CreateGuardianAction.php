@@ -39,7 +39,7 @@ class CreateGuardianAction
             }
 
             if ($student->guardians()->whereKey($guardian->id)->exists()) {
-                throw ValidationException::withMessages(['identity_number' => 'ولي الأمر مرتبط بهذا الطالب بالفعل.']);
+                throw ValidationException::withMessages(['guardianIdentityNumber' => 'ولي الأمر مرتبط بهذا الطالب بالفعل.']);
             }
 
             if ($data['is_primary']) {

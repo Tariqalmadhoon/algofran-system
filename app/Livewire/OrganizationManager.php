@@ -2,14 +2,16 @@
 
 namespace App\Livewire;
 
-use App\Models\Branch;
 use App\Models\Center;
 use App\Models\Halaqa;
 use App\Models\StaffProfile;
+use App\Models\Student;
 use App\Models\TeacherProfile;
+use App\Models\User;
 use App\Services\OrganizationService;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Livewire\Component;
 
 class OrganizationManager extends Component
@@ -18,23 +20,11 @@ class OrganizationManager extends Component
 
     public string $centerName = '';
 
-    public string $centerCode = '';
-
     public string $centerPhone = '';
 
     public string $centerEmail = '';
 
     public string $centerAddress = '';
-
-    public ?int $branchCenterId = null;
-
-    public string $branchName = '';
-
-    public string $branchCode = '';
-
-    public string $branchPhone = '';
-
-    public string $branchAddress = '';
 
     public string $personName = '';
 
@@ -48,31 +38,27 @@ class OrganizationManager extends Component
 
     public ?int $personCenterId = null;
 
-    public ?int $personBranchId = null;
-
-    public string $employeeNumber = '';
-
     public string $jobTitle = '';
 
     public string $staffRole = 'registrar';
 
     public string $specialization = '';
 
+    public ?int $existingTeacherUserId = null;
+
+    public ?int $managerTeacherHalaqaId = null;
+
+    public string $managerTeacherRole = 'primary';
+
+    public string $managerTeacherStartsAt = '';
+
     public string $hiredAt = '';
 
     public ?int $halaqaCenterId = null;
 
-    public ?int $halaqaBranchId = null;
-
     public string $halaqaName = '';
 
-    public string $halaqaCode = '';
-
-    public string $halaqaProgram = '';
-
     public int $halaqaCapacity = 20;
-
-    public string $halaqaRoom = '';
 
     public string $halaqaStartDate = '';
 
@@ -97,65 +83,102 @@ class OrganizationManager extends Component
     public function mount(): void
     {
         Gate::authorize('organization.view');
+        $this->assignmentStartsAt = today()->toDateString();
+        $this->managerTeacherStartsAt = today()->toDateString();
     }
 
     public function saveCenter(OrganizationService $service): void
     {
-        Gate::authorize('organization.manage');
+        $this->authorizeSystemAdministrator();
         $data = $this->validate([
             'centerName' => ['required', 'string', 'max:255'],
-            'centerCode' => ['required', 'string', 'max:50', 'alpha_dash', 'unique:centers,code'],
             'centerPhone' => ['nullable', 'string', 'max:30'],
             'centerEmail' => ['nullable', 'email', 'max:255'],
             'centerAddress' => ['nullable', 'string', 'max:1000'],
         ]);
-        $service->createCenter([
-            'name' => $data['centerName'], 'code' => strtoupper($data['centerCode']),
+        $center = $service->createCenter([
+            'name' => $data['centerName'],
             'phone' => $data['centerPhone'] ?: null, 'email' => $data['centerEmail'] ?: null,
             'address' => $data['centerAddress'] ?: null,
         ]);
-        $this->reset('centerName', 'centerCode', 'centerPhone', 'centerEmail', 'centerAddress');
-        $this->saved('تم إنشاء المركز بنجاح.');
-    }
-
-    public function saveBranch(OrganizationService $service): void
-    {
-        Gate::authorize('organization.manage');
-        $data = $this->validate([
-            'branchCenterId' => ['required', 'exists:centers,id'],
-            'branchName' => ['required', 'string', 'max:255'],
-            'branchCode' => ['required', 'string', 'max:50', 'alpha_dash', Rule::unique('branches', 'code')->where('center_id', $this->branchCenterId)],
-            'branchPhone' => ['nullable', 'string', 'max:30'],
-            'branchAddress' => ['nullable', 'string', 'max:1000'],
-        ]);
-        $service->createBranch([
-            'center_id' => $data['branchCenterId'], 'name' => $data['branchName'],
-            'code' => strtoupper($data['branchCode']), 'phone' => $data['branchPhone'] ?: null,
-            'address' => $data['branchAddress'] ?: null,
-        ]);
-        $this->reset('branchCenterId', 'branchName', 'branchCode', 'branchPhone', 'branchAddress');
-        $this->saved('تم إنشاء الفرع بنجاح.');
+        $this->reset('centerName', 'centerPhone', 'centerEmail', 'centerAddress');
+        $this->saved("تم إنشاء المركز بالرمز {$center->code} بنجاح.");
     }
 
     public function saveStaff(OrganizationService $service): void
     {
-        Gate::authorize('users.manage');
+        $this->authorizeSystemAdministrator();
         $data = $this->validate($this->personRules(false));
-        $service->createStaff($this->personPayload($data) + [
+        $staff = $service->createStaff($this->personPayload($data) + [
             'job_title' => $data['jobTitle'],
             'role' => $data['staffRole'],
         ]);
         $this->resetPerson();
-        $this->saved('تم إنشاء حساب الموظف بنجاح.');
+        $this->saved("تم إنشاء حساب الموظف بالرقم {$staff->employee_number} بنجاح.");
     }
 
     public function saveTeacher(OrganizationService $service): void
     {
-        Gate::authorize('users.manage');
+        $this->authorizeSystemAdministrator();
         $data = $this->validate($this->personRules(true));
-        $service->createTeacher($this->personPayload($data) + ['specialization' => $data['specialization'] ?: null]);
+        $teacher = $service->createTeacher($this->personPayload($data) + ['specialization' => $data['specialization'] ?: null]);
         $this->resetPerson();
-        $this->saved('تم إنشاء حساب المحفظ بنجاح.');
+        $this->saved("تم إنشاء حساب المحفظ بالرقم {$teacher->employee_number} بنجاح.");
+    }
+
+    public function saveManagerAsTeacher(OrganizationService $service): void
+    {
+        $this->authorizeSystemAdministrator();
+        $data = $this->validate([
+            'existingTeacherUserId' => ['required', 'exists:users,id'],
+            'managerTeacherHalaqaId' => ['required', 'exists:halaqas,id'],
+            'managerTeacherRole' => ['required', Rule::in(['primary', 'assistant'])],
+            'managerTeacherStartsAt' => ['required', 'date', 'before_or_equal:today'],
+            'specialization' => ['nullable', 'string', 'max:255'],
+            'hiredAt' => ['nullable', 'date'],
+        ]);
+        $manager = User::query()->findOrFail($data['existingTeacherUserId']);
+        try {
+            $assignment = $service->activateManagerAsTeacherAndAssign($manager, [
+                'halaqa_id' => $data['managerTeacherHalaqaId'],
+                'role' => $data['managerTeacherRole'],
+                'starts_at' => $data['managerTeacherStartsAt'],
+                'specialization' => $data['specialization'] ?: null,
+                'hired_at' => $data['hiredAt'] ?: null,
+            ]);
+        } catch (ValidationException $exception) {
+            $messages = $exception->errors();
+            if (isset($messages['halaqa_id'])) {
+                $messages['managerTeacherHalaqaId'] = $messages['halaqa_id'];
+                unset($messages['halaqa_id']);
+            }
+
+            throw ValidationException::withMessages($messages);
+        }
+        $assignment->load(['teacher', 'halaqa.currentStudents']);
+        $teacher = $assignment->teacher;
+        $halaqa = $assignment->halaqa;
+        $studentsCount = $halaqa->currentStudents->count();
+
+        $this->reset('existingTeacherUserId', 'managerTeacherHalaqaId', 'specialization', 'hiredAt');
+        $this->managerTeacherRole = 'primary';
+        $this->managerTeacherStartsAt = today()->toDateString();
+        $this->saved("تم تفعيل المدير كمحفّظ بالرقم {$teacher->employee_number} وإسناده إلى {$halaqa->name} في عملية واحدة. تضم الحلقة {$studentsCount} طالبًا حاليًا.");
+    }
+
+    public function updatedExistingTeacherUserId(): void
+    {
+        $manager = $this->existingTeacherUserId
+            ? User::query()->with('staffProfile')->find($this->existingTeacherUserId)
+            : null;
+
+        $this->managerTeacherHalaqaId = $manager?->staffProfile
+            ? Halaqa::query()
+                ->where('center_id', $manager->staffProfile->center_id)
+                ->where('active', true)
+                ->orderBy('name')
+                ->value('id')
+            : null;
     }
 
     public function saveHalaqa(OrganizationService $service): void
@@ -163,23 +186,20 @@ class OrganizationManager extends Component
         Gate::authorize('halaqas.manage');
         $data = $this->validate([
             'halaqaCenterId' => ['required', 'exists:centers,id'],
-            'halaqaBranchId' => ['required', 'exists:branches,id'],
             'halaqaName' => ['required', 'string', 'max:255'],
-            'halaqaCode' => ['required', 'string', 'max:50', 'alpha_dash', Rule::unique('halaqas', 'code')->where('branch_id', $this->halaqaBranchId)],
-            'halaqaProgram' => ['nullable', 'string', 'max:255'],
             'halaqaCapacity' => ['required', 'integer', 'min:1', 'max:500'],
-            'halaqaRoom' => ['nullable', 'string', 'max:255'],
             'halaqaStartDate' => ['nullable', 'date'],
         ]);
-        $service->createHalaqa([
-            'center_id' => $data['halaqaCenterId'], 'branch_id' => $data['halaqaBranchId'],
-            'name' => $data['halaqaName'], 'code' => strtoupper($data['halaqaCode']),
-            'program' => $data['halaqaProgram'] ?: null, 'capacity' => $data['halaqaCapacity'],
-            'room' => $data['halaqaRoom'] ?: null, 'start_date' => $data['halaqaStartDate'] ?: null,
+        $this->authorizeCenter((int) $data['halaqaCenterId']);
+        $halaqa = $service->createHalaqa([
+            'center_id' => $data['halaqaCenterId'],
+            'name' => $data['halaqaName'],
+            'capacity' => $data['halaqaCapacity'],
+            'start_date' => $data['halaqaStartDate'] ?: null,
         ]);
-        $this->reset('halaqaCenterId', 'halaqaBranchId', 'halaqaName', 'halaqaCode', 'halaqaProgram', 'halaqaRoom', 'halaqaStartDate');
+        $this->reset('halaqaCenterId', 'halaqaName', 'halaqaStartDate');
         $this->halaqaCapacity = 20;
-        $this->saved('تم إنشاء الحلقة بنجاح.');
+        $this->saved("تم إنشاء الحلقة بالرمز {$halaqa->code} بنجاح.");
     }
 
     public function saveSchedule(OrganizationService $service): void
@@ -192,6 +212,8 @@ class OrganizationManager extends Component
             'scheduleEndsAt' => ['required', 'date_format:H:i', 'after:scheduleStartsAt'],
             'scheduleRoom' => ['nullable', 'string', 'max:255'],
         ]);
+        $halaqa = Halaqa::query()->findOrFail($data['scheduleHalaqaId']);
+        $this->authorizeCenter((int) $halaqa->center_id);
         $service->createSchedule([
             'halaqa_id' => $data['scheduleHalaqaId'], 'weekday' => $data['weekday'],
             'starts_at' => $data['scheduleStartsAt'], 'ends_at' => $data['scheduleEndsAt'],
@@ -209,15 +231,27 @@ class OrganizationManager extends Component
             'assignmentHalaqaId' => ['required', 'exists:halaqas,id'],
             'assignmentTeacherId' => ['required', 'exists:teacher_profiles,id'],
             'assignmentRole' => ['required', Rule::in(['primary', 'assistant'])],
-            'assignmentStartsAt' => ['required', 'date'],
+            'assignmentStartsAt' => ['required', 'date', 'before_or_equal:today'],
         ]);
-        $service->assignTeacher([
+        $halaqa = Halaqa::query()->findOrFail($data['assignmentHalaqaId']);
+        $teacher = TeacherProfile::query()->findOrFail($data['assignmentTeacherId']);
+        $this->authorizeCenter((int) $halaqa->center_id);
+
+        if ((int) $teacher->center_id !== (int) $halaqa->center_id) {
+            $this->addError('assignmentTeacherId', 'اختر محفّظًا يتبع مركز الحلقة نفسه.');
+
+            return;
+        }
+        $assignment = $service->assignTeacher([
             'halaqa_id' => $data['assignmentHalaqaId'], 'teacher_profile_id' => $data['assignmentTeacherId'],
             'role' => $data['assignmentRole'], 'starts_at' => $data['assignmentStartsAt'],
         ]);
         $this->reset('assignmentHalaqaId', 'assignmentTeacherId', 'assignmentStartsAt');
         $this->assignmentRole = 'primary';
-        $this->saved('تم إسناد المحفظ للحلقة مع حفظ تاريخ الإسناد.');
+        $this->assignmentStartsAt = today()->toDateString();
+        $this->saved($assignment->wasRecentlyCreated
+            ? 'تم إسناد المحفّظ للحلقة وتفعيل جميع صلاحياته التعليمية.'
+            : 'هذا الإسناد مسجّل وفعّال بالفعل؛ لم يتم إنشاء سجل مكرر.');
     }
 
     public function toggleActive(string $type, int $id, OrganizationService $service): void
@@ -225,36 +259,81 @@ class OrganizationManager extends Component
         Gate::authorize('organization.manage');
         $model = match ($type) {
             'center' => Center::query()->findOrFail($id),
-            'branch' => Branch::query()->findOrFail($id),
             'halaqa' => Halaqa::query()->findOrFail($id),
             default => abort(404),
         };
+        $this->authorizeCenter((int) ($model instanceof Center ? $model->id : $model->center_id));
         $service->setActive($model, ! $model->active);
         $this->saved('تم تحديث الحالة.');
     }
 
     public function render()
     {
+        $centerIds = $this->visibleCenterIds();
+
         return view('livewire.organization-manager', [
-            'centers' => Center::query()->withCount('branches')->latest()->limit(100)->get(),
-            'branches' => Branch::query()->with('center:id,name')->withCount('halaqas')->latest()->limit(100)->get(),
-            'staff' => StaffProfile::query()->with(['user:id,name,email,phone', 'center:id,name', 'branch:id,name'])->latest()->limit(100)->get(),
-            'teachers' => TeacherProfile::query()->with(['user:id,name,email,phone', 'center:id,name', 'branch:id,name'])->latest()->limit(100)->get(),
-            'halaqas' => Halaqa::query()->with(['center:id,name', 'branch:id,name', 'primaryTeacher.user:id,name', 'schedules'])->latest()->limit(100)->get(),
+            'centers' => Center::query()
+                ->when($centerIds !== null, fn ($query) => $query->whereIn('id', $centerIds))
+                ->withCount('halaqas')->latest()->limit(100)->get(),
+            'staff' => StaffProfile::query()
+                ->when($centerIds !== null, fn ($query) => $query->whereIn('center_id', $centerIds))
+                ->where('active', true)
+                ->whereHas('user', fn ($query) => $query->where('active', true)->whereNull('archived_at'))
+                ->with(['user:id,name,email,phone', 'center:id,name'])->latest()->limit(100)->get(),
+            'teachers' => TeacherProfile::query()
+                ->when($centerIds !== null, fn ($query) => $query->whereIn('center_id', $centerIds))
+                ->where('active', true)
+                ->whereHas('user', fn ($query) => $query->where('active', true)->whereNull('archived_at'))
+                ->with(['user:id,name,email,phone', 'user.roles:id,name', 'center:id,name'])
+                ->withCount(['assignments as active_assignments_count' => fn ($assignments) => $assignments
+                    ->whereDate('starts_at', '<=', today())
+                    ->where(fn ($dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', today()))])
+                ->latest()
+                ->limit(100)
+                ->get(),
+            'eligibleTeacherManagers' => User::query()
+                ->where('active', true)
+                ->whereNull('archived_at')
+                ->whereHas('roles', fn ($roles) => $roles->whereIn('name', ['center-manager', 'super-admin']))
+                ->whereHas('staffProfile', fn ($staff) => $staff
+                    ->where('active', true)
+                    ->when($centerIds !== null, fn ($query) => $query->whereIn('center_id', $centerIds)))
+                ->with(['staffProfile.center:id,name', 'teacherProfile:id,user_id,employee_number,active'])
+                ->orderBy('name')
+                ->get(['id', 'name', 'email']),
+            'halaqas' => Halaqa::query()
+                ->when($centerIds !== null, fn ($query) => $query->whereIn('center_id', $centerIds))
+                ->with([
+                    'center:id,name',
+                    'primaryTeacher.user:id,name',
+                    'schedules',
+                    'teacherAssignments' => fn ($assignments) => $assignments
+                        ->whereDate('starts_at', '<=', today())
+                        ->where(fn ($dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', today()))
+                        ->with('teacher.user:id,name'),
+                ])
+                ->withCount('currentStudents')
+                ->latest()
+                ->limit(100)
+                ->get(),
+            'studentsCount' => Student::query()
+                ->when($centerIds !== null, fn ($query) => $query->whereHas('currentHalaqa', fn ($halaqas) => $halaqas->whereIn('center_id', $centerIds)))
+                ->count(),
         ]);
     }
 
     protected function validationAttributes(): array
     {
         return [
-            'centerName' => 'اسم المركز', 'centerCode' => 'رمز المركز', 'centerEmail' => 'البريد الإلكتروني',
-            'branchCenterId' => 'المركز', 'branchName' => 'اسم الفرع', 'branchCode' => 'رمز الفرع',
+            'centerName' => 'اسم المركز', 'centerEmail' => 'البريد الإلكتروني',
             'personName' => 'الاسم', 'personEmail' => 'البريد الإلكتروني', 'personPassword' => 'كلمة المرور',
-            'personCenterId' => 'المركز', 'personBranchId' => 'الفرع', 'employeeNumber' => 'الرقم الوظيفي',
-            'jobTitle' => 'المسمى الوظيفي', 'halaqaCenterId' => 'المركز', 'halaqaBranchId' => 'الفرع',
-            'halaqaName' => 'اسم الحلقة', 'halaqaCode' => 'رمز الحلقة', 'scheduleHalaqaId' => 'الحلقة',
+            'personCenterId' => 'المركز',
+            'jobTitle' => 'المسمى الوظيفي', 'halaqaCenterId' => 'المركز',
+            'halaqaName' => 'اسم الحلقة', 'scheduleHalaqaId' => 'الحلقة',
             'scheduleStartsAt' => 'وقت البداية', 'scheduleEndsAt' => 'وقت النهاية',
             'assignmentHalaqaId' => 'الحلقة', 'assignmentTeacherId' => 'المحفظ', 'assignmentStartsAt' => 'تاريخ الإسناد',
+            'existingTeacherUserId' => 'مدير المركز',
+            'managerTeacherHalaqaId' => 'حلقة المدير', 'managerTeacherStartsAt' => 'تاريخ بدء الإسناد',
         ];
     }
 
@@ -266,8 +345,6 @@ class OrganizationManager extends Component
             'personPhone' => ['nullable', 'string', 'max:30'],
             'personPassword' => ['required', 'string', 'min:10', 'confirmed'],
             'personCenterId' => ['required', 'exists:centers,id'],
-            'personBranchId' => ['nullable', 'exists:branches,id'],
-            'employeeNumber' => ['required', 'string', 'max:50', Rule::unique($teacher ? 'teacher_profiles' : 'staff_profiles', 'employee_number')],
             'hiredAt' => ['nullable', 'date'],
         ];
 
@@ -286,19 +363,44 @@ class OrganizationManager extends Component
         return [
             'name' => $data['personName'], 'email' => $data['personEmail'],
             'phone' => $data['personPhone'] ?: null, 'password' => $data['personPassword'],
-            'center_id' => $data['personCenterId'], 'branch_id' => $data['personBranchId'] ?: null,
-            'employee_number' => $data['employeeNumber'], 'hired_at' => $data['hiredAt'] ?: null,
+            'center_id' => $data['personCenterId'],
+            'hired_at' => $data['hiredAt'] ?: null,
         ];
     }
 
     private function resetPerson(): void
     {
-        $this->reset('personName', 'personEmail', 'personPhone', 'personPassword', 'personPassword_confirmation', 'personCenterId', 'personBranchId', 'employeeNumber', 'jobTitle', 'specialization', 'hiredAt');
+        $this->reset('personName', 'personEmail', 'personPhone', 'personPassword', 'personPassword_confirmation', 'personCenterId', 'jobTitle', 'specialization', 'hiredAt');
         $this->staffRole = 'registrar';
     }
 
     private function saved(string $message): void
     {
         session()->flash('success', $message);
+    }
+
+    private function authorizeSystemAdministrator(): User
+    {
+        $user = auth()->user();
+        abort_unless($user?->active && ! $user->archived_at && $user->hasRole('super-admin'), 403);
+
+        return $user;
+    }
+
+    /** @return list<int>|null Null means unrestricted super-admin access. */
+    private function visibleCenterIds(): ?array
+    {
+        $user = auth()->user();
+        if ($user->hasRole('super-admin')) {
+            return null;
+        }
+
+        return $user->staffProfile?->active ? [(int) $user->staffProfile->center_id] : [];
+    }
+
+    private function authorizeCenter(int $centerId): void
+    {
+        $visibleCenterIds = $this->visibleCenterIds();
+        abort_if($visibleCenterIds !== null && ! in_array($centerId, $visibleCenterIds, true), 403);
     }
 }

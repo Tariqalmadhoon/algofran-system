@@ -5,12 +5,14 @@ namespace App\Livewire;
 use App\Enums\AlertSeverity;
 use App\Enums\AlertStatus;
 use App\Models\Halaqa;
+use App\Models\Student;
 use App\Models\StudentAlert;
 use App\Services\StudentAchievementEngine;
 use App\Services\StudentAlertEngine;
 use App\Services\StudentProgressService;
 use App\Services\StudentVisibilityService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -27,11 +29,15 @@ class AlertCenter extends Component
 
     public string $search = '';
 
+    public bool $teachingScope = false;
+
     public array $resolutionNotes = [];
 
     public function mount(): void
     {
         Gate::authorize('viewAny', StudentAlert::class);
+        $this->teachingScope = request('scope') === 'teaching'
+            && (bool) auth()->user()->teacherProfile?->active;
     }
 
     public function updated($property): void
@@ -72,7 +78,7 @@ class AlertCenter extends Component
     ): void {
         Gate::authorize('alerts.manage');
         $count = 0;
-        $visibility->queryFor(auth()->user())->where('status', 'active')->chunkById(100, function ($students) use ($progress, $alerts, $achievements, &$count) {
+        $this->visibleStudents($visibility)->where('status', 'active')->chunkById(100, function ($students) use ($progress, $alerts, $achievements, &$count) {
             foreach ($students as $student) {
                 $snapshot = $progress->snapshot($student);
                 $alerts->evaluate($student->refresh(), $snapshot);
@@ -85,10 +91,16 @@ class AlertCenter extends Component
 
     public function render(StudentVisibilityService $visibility): View
     {
-        $studentIds = $visibility->queryFor(auth()->user())->select('students.id');
+        $studentIds = $this->visibleStudents($visibility)->select('students.id');
+        $activeSeverityCounts = StudentAlert::query()
+            ->whereIn('student_id', (clone $studentIds))
+            ->whereIn('status', [AlertStatus::Open->value, AlertStatus::Acknowledged->value])
+            ->selectRaw('severity, COUNT(*) as aggregate')
+            ->groupBy('severity')
+            ->pluck('aggregate', 'severity');
         $alerts = StudentAlert::query()
-            ->whereIn('student_id', $studentIds)
-            ->with(['student:id,full_name,student_number', 'teacher.user:id,name', 'halaqa:id,name'])
+            ->whereIn('student_id', (clone $studentIds))
+            ->with(['student:id,full_name,first_name,family_name,student_number,photo_private_file_id', 'student.photo:id', 'teacher.user:id,name', 'halaqa:id,name'])
             ->when($this->statusFilter, fn ($query) => $this->statusFilter === 'active'
                 ? $query->whereIn('status', ['open', 'acknowledged'])
                 : $query->where('status', $this->statusFilter))
@@ -103,7 +115,41 @@ class AlertCenter extends Component
             'alerts' => $alerts,
             'statuses' => AlertStatus::cases(),
             'severities' => AlertSeverity::cases(),
-            'halaqas' => Halaqa::query()->where('active', true)->orderBy('name')->get(['id', 'name']),
+            'halaqas' => $this->visibleHalaqas()->orderBy('name')->get(['id', 'name']),
+            'activeSeverityCounts' => $activeSeverityCounts,
+            'hasTeachingProfile' => (bool) auth()->user()->teacherProfile?->active,
         ]);
+    }
+
+    /** @return Builder<Student> */
+    private function visibleStudents(StudentVisibilityService $visibility): Builder
+    {
+        $query = $visibility->queryFor(auth()->user());
+        $teacherId = auth()->user()->teacherProfile?->id;
+
+        if (! $this->teachingScope || ! $teacherId) {
+            return $query;
+        }
+
+        return $query->whereHas('currentHalaqa.teacherAssignments', fn (Builder $assignments) => $assignments
+            ->where('teacher_profile_id', $teacherId)
+            ->whereDate('starts_at', '<=', today())
+            ->where(fn (Builder $dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', today())));
+    }
+
+    /** @return Builder<Halaqa> */
+    private function visibleHalaqas(): Builder
+    {
+        $query = Halaqa::query()->where('active', true);
+        $teacherId = auth()->user()->teacherProfile?->id;
+
+        if (! $this->teachingScope || ! $teacherId) {
+            return $query;
+        }
+
+        return $query->whereHas('teacherAssignments', fn (Builder $assignments) => $assignments
+            ->where('teacher_profile_id', $teacherId)
+            ->whereDate('starts_at', '<=', today())
+            ->where(fn (Builder $dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', today())));
     }
 }

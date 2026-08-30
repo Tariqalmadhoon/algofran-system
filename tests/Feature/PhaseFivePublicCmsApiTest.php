@@ -71,6 +71,77 @@ class PhaseFivePublicCmsApiTest extends TestCase
         $this->get(route('activities.index'))->assertSee('النشاط القرآني');
     }
 
+    public function test_cms_editor_can_manage_media_metadata_and_quick_publish_without_breaking_used_images(): void
+    {
+        Storage::fake('public');
+        $editor = User::factory()->create();
+        $editor->assignRole('website-editor');
+
+        $path = UploadedFile::fake()->image('managed-image.jpg', 900, 600)->store('cms/testing', 'public');
+        $media = CmsMedia::query()->create([
+            'disk' => 'public', 'path' => $path, 'original_name' => 'managed-image.jpg',
+            'mime_type' => 'image/jpeg', 'size' => 100, 'kind' => 'image', 'title' => 'صورة قديمة',
+            'is_gallery' => false, 'uploaded_by' => $editor->id,
+        ]);
+        $content = CmsContent::query()->create([
+            'type' => 'news', 'slug' => 'managed-news', 'title' => 'خبر قابل للإدارة',
+            'status' => 'draft', 'featured_media_id' => $media->id, 'created_by' => $editor->id,
+        ]);
+
+        Livewire::actingAs($editor)->test(CmsManager::class)
+            ->call('editMedia', $media->id)
+            ->set('editMediaTitle', 'صورة الخبر المحدثة')
+            ->set('editMediaAlt', 'طلاب يتابعون حلقة القرآن')
+            ->set('editMediaGallery', true)
+            ->call('saveMedia')
+            ->assertHasNoErrors()
+            ->call('changeContentStatus', $content->id, 'published')
+            ->assertHasNoErrors()
+            ->call('deleteMedia', $media->id)
+            ->assertHasErrors('mediaLibrary');
+
+        $this->assertDatabaseHas('cms_media', ['id' => $media->id, 'title' => 'صورة الخبر المحدثة', 'is_gallery' => true]);
+        $this->assertDatabaseHas('cms_contents', ['id' => $content->id, 'status' => 'published']);
+        Storage::disk('public')->assertExists($path);
+        $this->get(route('news.show', $content->fresh()))->assertOk()->assertSee('خبر قابل للإدارة');
+
+        $content->update(['featured_media_id' => null]);
+        Livewire::actingAs($editor)->test(CmsManager::class)->call('deleteMedia', $media->id)->assertHasNoErrors();
+
+        $this->assertSoftDeleted('cms_media', ['id' => $media->id]);
+        Storage::disk('public')->assertMissing($path);
+    }
+
+    public function test_editor_can_preview_and_publish_a_featured_image_from_the_content_form(): void
+    {
+        Storage::fake('public');
+        $editor = User::factory()->create();
+        $editor->assignRole('website-editor');
+
+        Livewire::actingAs($editor)->test(CmsManager::class)
+            ->call('newContent')
+            ->set('contentType', 'news')
+            ->set('contentTitle', 'خبر مصور من نموذج المحتوى')
+            ->set('contentSlug', 'content-form-image')
+            ->set('contentExcerpt', 'ملخص الخبر المصور')
+            ->set('contentBody', 'تفاصيل الخبر المصور')
+            ->set('contentStatus', 'published')
+            ->set('contentImageFile', UploadedFile::fake()->image('featured.jpg', 1200, 750))
+            ->set('contentImageAlt', 'طلاب داخل حلقة تحفيظ القرآن')
+            ->assertSee('معاينة الصورة قبل النشر')
+            ->call('saveContent')
+            ->assertHasNoErrors();
+
+        $content = CmsContent::query()->where('slug', 'content-form-image')->firstOrFail();
+        $media = $content->featuredMedia()->firstOrFail();
+
+        $this->assertSame('خبر مصور من نموذج المحتوى', $media->title);
+        $this->assertSame('طلاب داخل حلقة تحفيظ القرآن', $media->alt_text);
+        $this->assertFalse($media->is_gallery);
+        Storage::disk('public')->assertExists($media->path);
+        $this->get(route('news.show', $content))->assertOk()->assertSee($media->url);
+    }
+
     public function test_contact_form_stores_message_for_cms_inbox(): void
     {
         $this->post(route('public.contact.store'), ['name' => 'زائر الموقع', 'phone' => '0599000000', 'email' => 'visitor@example.com', 'subject' => 'استفسار عن التسجيل', 'message' => 'أرغب بمعرفة البرامج المتاحة.', 'website' => ''])

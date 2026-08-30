@@ -27,6 +27,8 @@ return [
     ],
 
     'identity' => [
+        // Temporarily disabled. Set TWO_FACTOR_AUTH_ENABLED=true to restore all 2FA flows.
+        'two_factor_enabled' => (bool) env('TWO_FACTOR_AUTH_ENABLED', false),
         'two_factor_required_roles' => [
             'super-admin',
             'center-manager',

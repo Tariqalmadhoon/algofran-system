@@ -1,24 +1,26 @@
 <x-app-shell title="أمان الحساب">
-    @php $twoFactorEnabled = $user->hasEnabledTwoFactorAuthentication(); @endphp
+    @php
+        $twoFactorAvailable = (bool) config('system.identity.two_factor_enabled', false);
+        $twoFactorEnabled = $twoFactorAvailable && $user->hasEnabledTwoFactorAuthentication();
+    @endphp
 
     <div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-            <p class="eyebrow">الهوية القوية</p>
+            <p class="eyebrow">الأمان والوصول</p>
             <h1 class="page-title">أمان الحساب والأجهزة</h1>
-            <p class="page-subtitle">أدر المصادقة الثنائية والجلسات النشطة ورموز تطبيقات الجوال.</p>
+            <p class="page-subtitle">أدر الجلسات النشطة والأجهزة المرتبطة بالحساب.</p>
         </div>
         <a class="btn-secondary" href="{{ route('profile.edit') }}">العودة إلى الملف الشخصي</a>
     </div>
 
-    @if (session('status'))
-        <div class="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">
-            تم تحديث إعدادات أمان الحساب بنجاح.
-        </div>
+    <x-flash-messages inline consume />
+    @if($twoFactorAvailable)
+        <x-input-error :messages="$errors->get('two_factor')" />
     @endif
-    <x-input-error :messages="$errors->get('two_factor')" />
 
-    <div class="grid gap-6 xl:grid-cols-[1.05fr_.95fr]">
-        <section class="panel">
+    <div @class(['grid gap-6', 'xl:grid-cols-[1.05fr_.95fr]' => $twoFactorAvailable])>
+        @if($twoFactorAvailable)
+            <section class="panel">
             <div class="flex items-start justify-between gap-4">
                 <div>
                     <h2 class="section-title">المصادقة الثنائية</h2>
@@ -64,19 +66,20 @@
                 </div>
 
                 <div class="mt-6 flex flex-wrap gap-3">
-                    <form method="POST" action="{{ route('profile.two-factor.rotate') }}" onsubmit="return confirm('سيتم تسجيل خروج الأجهزة الأخرى واستبدال المفتاح الحالي. متابعة؟')">
+                    <form method="POST" action="{{ route('profile.two-factor.rotate') }}" @submit.prevent="$dispatch('app:confirm', { title: 'استبدال تطبيق المصادقة', message: 'سيتم تسجيل خروج الأجهزة الأخرى واستبدال المفتاح الحالي.', confirmLabel: 'استبدال المفتاح', tone: 'warning', action: () => $el.submit() })">
                         @csrf
                         <button class="btn-secondary" type="submit">استبدال تطبيق المصادقة</button>
                     </form>
                     @unless($user->requiresTwoFactorAuthentication())
-                        <form method="POST" action="{{ route('profile.two-factor.disable') }}" onsubmit="return confirm('تعطيل المصادقة الثنائية؟')">
+                        <form method="POST" action="{{ route('profile.two-factor.disable') }}" @submit.prevent="$dispatch('app:confirm', { title: 'تعطيل المصادقة الثنائية', message: 'سيصبح الحساب محميًا بكلمة المرور فقط بعد هذا الإجراء.', confirmLabel: 'تعطيل الحماية', tone: 'danger', action: () => $el.submit() })">
                             @csrf @method('DELETE')
                             <button class="btn-ghost text-rose-700" type="submit">تعطيل المصادقة الثنائية</button>
                         </form>
                     @endunless
                 </div>
             @endif
-        </section>
+            </section>
+        @endif
 
         <div class="space-y-6">
             <section class="panel">
