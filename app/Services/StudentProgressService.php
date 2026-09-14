@@ -101,7 +101,7 @@ class StudentProgressService
         $late = (int) ($attendanceCounts['late'] ?? 0);
         $absent = (int) ($attendanceCounts['absent'] ?? 0);
         $excused = (int) ($attendanceCounts['excused'] ?? 0);
-        $attendanceDenominator = $present + $late + $absent;
+        $attendanceDenominator = $present + $late + $absent + $excused;
         $attendanceRate = $attendanceDenominator > 0 ? round((($present + $late) / $attendanceDenominator) * 100, 2) : 0.0;
 
         $periodStart = $date->copy()->subDays(29)->startOfDay();

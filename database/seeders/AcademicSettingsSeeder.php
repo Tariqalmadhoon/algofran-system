@@ -15,6 +15,7 @@ class AcademicSettingsSeeder extends Seeder
             ['monthly_memorization_sessions_target', config('system.academic.monthly_memorization_sessions_target'), 'integer'],
             ['monthly_revision_sessions_target', config('system.academic.monthly_revision_sessions_target'), 'integer'],
             ['absence_alert_count', config('system.academic.absence_alert_count'), 'integer'],
+            ['monthly_excused_absence_allowance', config('system.academic.monthly_excused_absence_allowance'), 'integer'],
             ['revision_delay_days', config('system.academic.revision_delay_days'), 'integer'],
             ['missing_record_days', config('system.academic.missing_record_days'), 'integer'],
         ];

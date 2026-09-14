@@ -189,6 +189,23 @@ class PhaseTwoStudentTrackingTest extends TestCase
         $this->assertDatabaseHas('recitation_items', ['type' => 'recent_revision', 'start_ayah_id' => 8, 'end_ayah_id' => 12]);
         $this->assertDatabaseHas('student_timeline_events', ['student_id' => $student->id, 'event_type' => 'daily-record.created']);
 
+        $component
+            ->assertSee('السجلات السابقة: 1')
+            ->assertSee('الكشف السابق')
+            ->call('showStudentHistory', $student->id)
+            ->assertSet('historyStudentId', (string) $student->id)
+            ->assertSee('الكشف السابق للطالب')
+            ->assertSee('إجمالي الجلسات')
+            ->assertSee('من الفاتحة آية 1 إلى الفاتحة آية 7')
+            ->assertSee('حفظ جديد')
+            ->assertSee('مراجعة قريبة')
+            ->assertSee('التقييم العام: جيد جدًا')
+            ->call('setHistoryFilter', 'revision')
+            ->assertSet('historyFilter', 'revision')
+            ->assertSee('مراجعة قريبة')
+            ->call('closeStudentHistory')
+            ->assertSet('historyStudentId', '');
+
         $report = app(ReportDataService::class)->build('memorization_records', [
             'date_from' => today()->toDateString(),
             'date_to' => today()->toDateString(),
@@ -471,6 +488,54 @@ class PhaseTwoStudentTrackingTest extends TestCase
             ->assertHasErrors(['recordDate']);
     }
 
+    public function test_excused_absence_disables_recitation_and_saves_attendance_without_evaluation(): void
+    {
+        $teacherUser = User::factory()->create();
+        $teacherUser->assignRole('teacher');
+        [$center, $branch, $halaqa] = $this->organization();
+        $teacher = TeacherProfile::query()->create([
+            'user_id' => $teacherUser->id,
+            'center_id' => $center->id,
+            'branch_id' => $branch->id,
+            'employee_number' => 'T-EXCUSED',
+            'active' => true,
+        ]);
+        $halaqa->teacherAssignments()->create([
+            'teacher_profile_id' => $teacher->id,
+            'role' => 'primary',
+            'starts_at' => today()->subMonth()->toDateString(),
+        ]);
+        $student = $this->createStudent($teacherUser, $halaqa, 'STU-EXCUSED');
+
+        Livewire::actingAs($teacherUser)
+            ->test(TeacherDailyRecorder::class)
+            ->call('selectStudent', $student->id)
+            ->assertSet('studentId', (string) $student->id)
+            ->assertSet('items.0.enabled', true)
+            ->set('generalEvaluation', 'excellent')
+            ->set('attendanceStatus', 'excused')
+            ->assertSet('generalEvaluation', '')
+            ->assertSet('items.0.enabled', false)
+            ->assertSet('items.1.enabled', false)
+            ->assertSet('items.2.enabled', false)
+            ->assertSet('items.3.enabled', false)
+            ->assertSet('items.4.enabled', false)
+            ->assertSet('items.5.enabled', false)
+            ->call('save')
+            ->assertHasNoErrors()
+            ->assertSet('studentId', '');
+
+        $this->assertDatabaseHas('attendances', [
+            'student_id' => $student->id,
+            'status' => 'excused',
+        ]);
+        $this->assertDatabaseHas('daily_records', [
+            'student_id' => $student->id,
+            'general_evaluation' => null,
+        ]);
+        $this->assertDatabaseCount('recitation_items', 0);
+    }
+
     public function test_teacher_and_guardian_student_visibility_is_scoped(): void
     {
         $teacherUser = User::factory()->create();
@@ -497,6 +562,12 @@ class PhaseTwoStudentTrackingTest extends TestCase
         $this->assertSame([$ownStudent->id], $visibleIds);
         $this->actingAs($teacherUser)->get(route('students.show', $ownStudent))->assertOk();
         $this->actingAs($teacherUser)->get(route('students.show', $otherStudent))->assertForbidden();
+        Livewire::actingAs($teacherUser)
+            ->test(TeacherDailyRecorder::class)
+            ->set('halaqaId', (string) $otherHalaqa->id)
+            ->call('showStudentHistory', $otherStudent->id)
+            ->assertSet('historyStudentId', '')
+            ->assertHasErrors(['historyStudentId']);
 
         $guardianUser = User::factory()->create();
         $guardianUser->assignRole('guardian');

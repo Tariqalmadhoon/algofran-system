@@ -1,0 +1,28 @@
+# Replace __PROJECT_PATH__ and __DEPLOY_USER__, then copy this file into
+# /etc/supervisor/conf.d/alquran.conf and reload Supervisor.
+
+[program:alquran-worker]
+process_name=%(program_name)s_%(process_num)02d
+command=php __PROJECT_PATH__/artisan queue:work database --queue=default --sleep=3 --tries=2 --timeout=900 --max-time=3600
+directory=__PROJECT_PATH__
+user=__DEPLOY_USER__
+autostart=true
+autorestart=true
+stopasgroup=true
+killasgroup=true
+numprocs=2
+redirect_stderr=true
+stdout_logfile=__PROJECT_PATH__/storage/logs/worker.log
+stopwaitsecs=960
+
+[program:alquran-reverb]
+command=php __PROJECT_PATH__/artisan reverb:start --host=127.0.0.1 --port=8080
+directory=__PROJECT_PATH__
+user=__DEPLOY_USER__
+autostart=true
+autorestart=true
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile=__PROJECT_PATH__/storage/logs/reverb.log
+stopwaitsecs=20

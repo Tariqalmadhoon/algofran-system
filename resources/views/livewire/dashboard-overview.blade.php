@@ -2,6 +2,7 @@
     $stats = $analytics['stats'];
     $attendance = $analytics['attendance'];
     $coverage = $analytics['coverage'];
+    $studentRankings = $analytics['student_rankings'];
     $role = auth()->user()->getRoleNames()->first();
     $teachingContext = $analytics['teacher_today'];
     $dashboardLabel = match(true) {
@@ -43,6 +44,18 @@
             </div>
 
             <div class="flex flex-wrap gap-2">
+                @if($teachingContext)
+                    <a href="{{ route('teacher.mobile.app') }}" class="inline-flex items-center gap-2 rounded-xl border border-emerald-200/30 bg-emerald-300/10 px-4 py-2.5 text-sm font-bold text-emerald-50 backdrop-blur transition hover:-translate-y-0.5 hover:bg-emerald-300/20">
+                        <x-nav-icon name="mobile" class="size-5" />
+                        تطبيق المحفّظ
+                    </a>
+                @endif
+                @if(auth()->user()->hasRole('super-admin'))
+                    <a href="{{ route('mobile.distribution') }}" class="inline-flex items-center gap-2 rounded-xl border border-emerald-200/30 bg-emerald-300/10 px-4 py-2.5 text-sm font-bold text-emerald-50 backdrop-blur transition hover:-translate-y-0.5 hover:bg-emerald-300/20">
+                        <x-nav-icon name="mobile" class="size-5" />
+                        توزيع التطبيق
+                    </a>
+                @endif
                 <button @click="filtersOpen = ! filtersOpen" type="button" class="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-bold text-white backdrop-blur hover:-translate-y-0.5 hover:bg-white/15">
                     <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16M7 12h10m-7 7h4" stroke-linecap="round"/><circle cx="8" cy="5" r="2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="2" fill="currentColor" stroke="none"/></svg>
                     تخصيص النطاق
@@ -165,6 +178,110 @@
             <article class="rounded-2xl border border-slate-200/75 bg-white px-4 py-4 transition duration-300 hover:border-emerald-200 hover:bg-emerald-50/30"><p class="text-2xl font-black text-slate-800">{{ $value }}</p><p class="mt-1 text-xs font-bold text-slate-400">{{ $label }}</p></article>
         @endforeach
     </section>
+
+    @can('reports.view')
+        <section class="relative isolate overflow-hidden rounded-[2rem] border border-emerald-200/80 bg-white shadow-[0_30px_80px_-48px_rgba(6,78,59,.6)]">
+            <div class="pointer-events-none absolute -left-24 -top-24 -z-10 size-72 rounded-full bg-amber-200/20 blur-3xl"></div>
+            <div class="pointer-events-none absolute -bottom-32 right-1/3 -z-10 size-72 rounded-full bg-emerald-200/20 blur-3xl"></div>
+
+            <div class="border-b border-emerald-100 bg-gradient-to-l from-emerald-50/90 via-white to-amber-50/60 p-5 sm:p-7">
+                <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                        <div class="mb-2 flex items-center gap-2 text-xs font-black text-emerald-700"><span class="grid size-7 place-items-center rounded-lg bg-emerald-800 text-white">١</span><span>لوحة الالتزام والإنجاز</span></div>
+                        <h2 class="text-2xl font-black text-emerald-950">ترتيب الطلاب خلال الفترة</h2>
+                        <p class="mt-2 max-w-3xl text-sm leading-7 text-slate-500">الحفظ يُحسب من الآيات الفريدة المسجلة كحفظ جديد دون مضاعفة النطاقات المتداخلة، والالتزام يعتبر «بعذر» غيابًا وليس حضورًا.</p>
+                    </div>
+                    <span class="w-fit rounded-2xl border border-emerald-200 bg-white px-4 py-2 text-xs font-black text-emerald-800" dir="ltr">{{ $studentRankings['period']['from'] }} → {{ $studentRankings['period']['to'] }}</span>
+                </div>
+
+                <div class="mt-6 grid gap-4 lg:grid-cols-2">
+                    @php
+                        $topMemorizer = $studentRankings['top_memorizer'];
+                    @endphp
+                    <article class="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-400 via-amber-500 to-orange-500 p-5 text-white shadow-xl shadow-amber-900/15 transition duration-300 hover:-translate-y-1">
+                        <span class="absolute -left-8 -top-10 text-[8rem] leading-none text-white/10">★</span>
+                        <div class="relative flex items-center gap-4">
+                            <span class="grid size-14 shrink-0 place-items-center rounded-2xl bg-white/20 text-2xl backdrop-blur">🏆</span>
+                            @if($topMemorizer)
+                                <x-student-avatar :student="$topMemorizer['student']" />
+                                <div class="min-w-0 flex-1"><p class="text-xs font-black text-amber-100">أكثر الطلاب حفظًا</p><p class="mt-1 truncate text-lg font-black">{{ $topMemorizer['student']->full_name }}</p><p class="mt-1 text-xs text-white/80">{{ number_format($topMemorizer['equivalent_juz'], 2) }} جزء تقريبًا · {{ $topMemorizer['memorized_ayahs'] }} آية</p></div>
+                            @else
+                                <div><p class="font-black">لم يُسجل حفظ جديد</p><p class="mt-1 text-xs text-white/80">سيظهر بطل الفترة مع أول سجل.</p></div>
+                            @endif
+                        </div>
+                    </article>
+
+                    @php
+                        $mostCommitted = $studentRankings['most_committed'];
+                    @endphp
+                    <article class="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-800 via-emerald-700 to-teal-600 p-5 text-white shadow-xl shadow-emerald-950/15 transition duration-300 hover:-translate-y-1">
+                        <span class="absolute -left-6 -top-12 text-[9rem] leading-none text-white/[.06]">✓</span>
+                        <div class="relative flex items-center gap-4">
+                            <span class="grid size-14 shrink-0 place-items-center rounded-2xl bg-white/15 text-2xl backdrop-blur">✓</span>
+                            @if($mostCommitted)
+                                <x-student-avatar :student="$mostCommitted['student']" />
+                                <div class="min-w-0 flex-1"><p class="text-xs font-black text-emerald-100">الأكثر التزامًا</p><p class="mt-1 truncate text-lg font-black">{{ $mostCommitted['student']->full_name }}</p><p class="mt-1 text-xs text-white/75">{{ number_format($mostCommitted['commitment_rate'], 1) }}% · {{ $mostCommitted['attendance_days'] }} أيام مسجلة</p></div>
+                            @else
+                                <div><p class="font-black">لا توجد بيانات حضور</p><p class="mt-1 text-xs text-white/75">سيبدأ الترتيب بعد أول تسجيل يومي.</p></div>
+                            @endif
+                        </div>
+                    </article>
+                </div>
+
+                <div class="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
+                    @foreach([
+                        ['الطلاب', $studentRankings['summary']['students']],
+                        ['الآيات المحفوظة', $studentRankings['summary']['memorized_ayahs']],
+                        ['ما يعادل من الأجزاء', number_format($studentRankings['summary']['equivalent_juz'], 2)],
+                        ['متوسط الالتزام', $studentRankings['summary']['average_commitment'] === null ? '—' : number_format($studentRankings['summary']['average_commitment'], 1).'%'],
+                        ['الغياب', $studentRankings['summary']['absent_days'].' + '.$studentRankings['summary']['excused_days'].' بعذر'],
+                    ] as [$label, $value])
+                        <div class="rounded-2xl border border-white bg-white/80 p-3 shadow-sm backdrop-blur"><p class="text-[11px] font-bold text-slate-400">{{ $label }}</p><p class="mt-1 text-xl font-black text-emerald-950">{{ $value }}</p></div>
+                    @endforeach
+                </div>
+            </div>
+
+            <div class="p-4 sm:p-6" x-data="{ expanded: false }">
+                <div class="mb-4 flex items-center justify-between gap-3"><div><h3 class="font-black text-slate-800">الترتيب التفصيلي</h3><p class="mt-1 text-xs text-slate-400">يُرتب الجدول بكمية الحفظ، ثم نسبة الالتزام عند التعادل.</p></div><span class="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-600">{{ $studentRankings['rankings']->count() }} طالب</span></div>
+
+                <div class="overflow-x-auto rounded-2xl border border-slate-200">
+                    <table class="min-w-[1050px] w-full text-right text-sm">
+                        <thead class="bg-slate-900 text-[11px] font-black text-white"><tr><th class="px-4 py-3">الترتيب</th><th class="px-4 py-3">الطالب</th><th class="px-4 py-3">الحلقة / المحفّظ</th><th class="px-4 py-3">حفظ الفترة</th><th class="px-4 py-3">الحضور</th><th class="px-4 py-3">غياب</th><th class="px-4 py-3">بعذر</th><th class="px-4 py-3">الالتزام</th><th class="px-4 py-3">الحالة</th></tr></thead>
+                        <tbody class="divide-y divide-slate-100 bg-white">
+                            @forelse($studentRankings['rankings'] as $row)
+                                @php
+                                    $statusMeta = match($row['commitment_status']) {
+                                        'excellent' => ['ملتزم جدًا', 'bg-emerald-50 text-emerald-700'],
+                                        'good' => ['التزام جيد', 'bg-sky-50 text-sky-700'],
+                                        'needs_contact' => ['يلزم التواصل', 'bg-red-50 text-red-700'],
+                                        'over_excused' => ['تجاوز المسموح', 'bg-amber-50 text-amber-700'],
+                                        'needs_followup' => ['يحتاج متابعة', 'bg-amber-50 text-amber-700'],
+                                        default => ['دون بيانات', 'bg-slate-100 text-slate-500'],
+                                    };
+                                @endphp
+                                <tr x-cloak class="group transition hover:bg-emerald-50/40" x-show="expanded || {{ $row['rank'] }} <= 8" x-transition.opacity>
+                                    <td class="px-4 py-3"><span @class(['grid size-9 place-items-center rounded-xl text-xs font-black', 'bg-amber-100 text-amber-800 ring-1 ring-amber-300' => $row['rank'] === 1, 'bg-slate-100 text-slate-600' => $row['rank'] > 1])>{{ $row['rank'] }}</span></td>
+                                    <td class="px-4 py-3"><div class="flex items-center gap-3"><x-student-avatar :student="$row['student']" size="sm" /><div class="min-w-0">@can('view', $row['student'])<a href="{{ route('students.show', $row['student']) }}" class="block max-w-48 truncate font-black text-slate-800 transition hover:text-emerald-700">{{ $row['student']->full_name }}</a>@else<span class="block max-w-48 truncate font-black text-slate-800">{{ $row['student']->full_name }}</span>@endcan<p class="mt-0.5 text-[10px] text-slate-400">حفظ #{{ $row['memorization_rank'] }} · التزام #{{ $row['commitment_rank'] ?? '—' }}</p></div></div></td>
+                                    <td class="px-4 py-3"><p class="font-bold text-slate-700">{{ $row['halaqa_name'] }}</p><p class="mt-1 text-[11px] text-slate-400">{{ $row['teacher_name'] }}</p></td>
+                                    <td class="px-4 py-3"><strong class="text-emerald-800">{{ number_format($row['equivalent_juz'], 2) }} جزء</strong><p class="mt-1 text-[11px] text-slate-400">{{ $row['memorized_ayahs'] }} آية · {{ $row['memorization_sessions'] }} جلسات</p></td>
+                                    <td class="px-4 py-3"><span class="font-black text-emerald-700">{{ $row['present_days'] }}</span><span class="mx-1 text-slate-300">+</span><span class="font-black text-amber-600">{{ $row['late_days'] }} متأخر</span></td>
+                                    <td class="px-4 py-3"><span @class(['font-black', 'text-red-600' => $row['absent_days'] > 0, 'text-slate-400' => $row['absent_days'] === 0])>{{ $row['absent_days'] }}</span></td>
+                                    <td class="px-4 py-3"><span @class(['font-black', 'text-amber-600' => $row['excused_days'] > 3, 'text-sky-600' => $row['excused_days'] <= 3])>{{ $row['excused_days'] }}</span><span class="mr-1 text-[10px] text-slate-400">/ 3</span></td>
+                                    <td class="px-4 py-3">@if($row['commitment_rate'] !== null)<div class="w-24"><div class="mb-1 flex justify-between text-[10px]"><strong class="text-slate-700">{{ number_format($row['commitment_rate'], 1) }}%</strong></div><div class="h-1.5 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-gradient-to-l from-emerald-600 to-teal-400 transition-all duration-700" style="width: {{ $row['commitment_rate'] }}%"></div></div></div>@else<span class="text-slate-400">—</span>@endif</td>
+                                    <td class="px-4 py-3"><span class="inline-flex rounded-full px-2.5 py-1 text-[10px] font-black {{ $statusMeta[1] }}">{{ $statusMeta[0] }}</span></td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="9" class="px-5 py-12 text-center text-sm font-bold text-slate-400">لا يوجد طلاب ضمن النطاق الحالي.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+                @if($studentRankings['rankings']->count() > 8)
+                    <button @click="expanded = ! expanded" type="button" class="btn-secondary mx-auto mt-4"><span x-text="expanded ? 'عرض الأوائل فقط' : 'عرض كل الطلاب'"></span></button>
+                @endif
+            </div>
+        </section>
+    @endcan
 
     <section class="grid gap-6 xl:grid-cols-[1.35fr_.65fr]">
         <article class="panel overflow-hidden">

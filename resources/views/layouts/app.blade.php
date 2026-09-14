@@ -30,6 +30,7 @@
         request()->routeIs('notifications.*') => 'الإشعارات',
         request()->routeIs('reports.*') => 'مركز التقارير',
         request()->routeIs('cms.*') => 'إدارة الموقع العام',
+        request()->routeIs('mobile.distribution') => 'توزيع تطبيق المحفّظ',
         request()->routeIs('profile.*') => 'الملف الشخصي',
         default => config('app.name'),
     };
@@ -50,9 +51,11 @@
         : collect();
 @endphp
 <body class="min-h-screen overflow-x-hidden bg-[#f5f7f6] text-slate-900 antialiased">
+    <div class="navigation-progress" aria-hidden="true"></div>
     <div
         x-data="{
             sidebarOpen: false,
+            isDesktop: window.innerWidth >= 1024,
             sidebarCollapsed: document.documentElement.dataset.sidebarCollapsed === 'true',
             userMenu: false,
             notificationMenu: false,
@@ -68,14 +71,18 @@
                 setTimeout(() => this.realtimeNotification = null, 6500);
             }
         }"
-        x-init="$watch('sidebarCollapsed', value => { document.documentElement.dataset.sidebarCollapsed = value ? 'true' : 'false'; localStorage.setItem('alquran-sidebar-collapsed', JSON.stringify(value)); })"
+        x-init="$watch('sidebarCollapsed', value => { document.documentElement.dataset.sidebarCollapsed = value ? 'true' : 'false'; try { localStorage.setItem('alquran-sidebar-collapsed', JSON.stringify(value)); } catch (_) {} })"
         @keydown.escape.window="sidebarOpen = false; userMenu = false; notificationMenu = false"
+        @resize.window.debounce.100ms="isDesktop = window.innerWidth >= 1024; if (isDesktop) sidebarOpen = false"
         @alquran:notification.window="receiveNotification($event)"
         class="min-h-screen"
     >
         <div x-cloak x-show="sidebarOpen" x-transition.opacity class="fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-sm lg:hidden" @click="sidebarOpen = false"></div>
 
         <aside
+            x-cloak
+            id="app-sidebar"
+            :inert="!isDesktop && !sidebarOpen"
             :class="sidebarOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'"
             class="app-sidebar-shell fixed inset-y-0 right-0 z-50 flex flex-col overflow-hidden bg-[linear-gradient(165deg,#073b31_0%,#0b513e_52%,#08372f_100%)] text-white shadow-2xl shadow-emerald-950/25 transition-[transform,width] duration-300 ease-out"
         >
@@ -83,7 +90,7 @@
             <div class="flex h-20 shrink-0 items-center gap-3 border-b border-white/10 px-5" :class="sidebarCollapsed ? 'lg:justify-center lg:px-2' : ''">
                 <a href="{{ route('dashboard') }}" class="flex min-w-0 items-center gap-3">
                     <x-brand-logo size="xs" />
-                    <span x-show="!sidebarCollapsed" x-transition.opacity.duration.200ms class="min-w-0 lg:block">
+                    <span x-show="!sidebarCollapsed || !isDesktop" x-transition.opacity.duration.200ms class="min-w-0 lg:block">
                         <span class="block max-w-48 text-sm font-extrabold leading-5">{{ config('app.name') }}</span>
                         <span class="block truncate pt-0.5 text-[10px] text-emerald-100/65">نظام الإدارة والمتابعة المؤسسية</span>
                     </span>
@@ -97,12 +104,12 @@
                 <div class="mx-3 mt-3 rounded-2xl border border-white/10 bg-white/[.07] p-3" :class="sidebarCollapsed ? 'lg:p-2' : ''" title="{{ $teachingProfile->center?->name }} — {{ $assignedTeachingHalaqas->pluck('name')->join('، ') }}">
                     <div class="flex items-center gap-3" :class="sidebarCollapsed ? 'lg:justify-center' : ''">
                         <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-300/15 text-emerald-100"><x-islamic-icon name="mosque" class="size-5" /></span>
-                        <span x-show="!sidebarCollapsed" x-transition.opacity class="min-w-0">
+                        <span x-show="!sidebarCollapsed || !isDesktop" x-transition.opacity class="min-w-0">
                             <span class="block text-[10px] font-black tracking-wider text-emerald-200/70">أنت تعمل داخل</span>
                             <span class="mt-0.5 block truncate text-xs font-black text-white">{{ $teachingProfile->center?->name ?? config('app.name') }}</span>
                         </span>
                     </div>
-                    <div x-show="!sidebarCollapsed" x-transition.opacity class="mt-3 space-y-1.5 border-t border-white/10 pt-3">
+                    <div x-show="!sidebarCollapsed || !isDesktop" x-transition.opacity class="mt-3 space-y-1.5 border-t border-white/10 pt-3">
                         @forelse($assignedTeachingHalaqas as $workHalaqa)
                             <a href="{{ route('teacher.daily') }}" class="flex items-center gap-2 rounded-xl bg-emerald-950/25 px-2.5 py-2 text-[11px] font-bold text-emerald-50 transition hover:bg-white/10"><span class="size-1.5 shrink-0 rounded-full bg-emerald-300"></span><span class="truncate">{{ $workHalaqa->name }}</span></a>
                         @empty
@@ -113,71 +120,78 @@
             @endif
 
             <nav class="relative flex-1 overflow-y-auto overflow-x-hidden px-3 pb-5" aria-label="التنقل الرئيسي">
-                <p class="sidebar-section" x-show="!sidebarCollapsed">نظرة عامة</p>
+                <p class="sidebar-section" x-show="!sidebarCollapsed || !isDesktop">نظرة عامة</p>
                 <a class="sidebar-link group {{ request()->routeIs('dashboard') ? 'sidebar-link-active' : '' }}" href="{{ route('dashboard') }}" title="لوحة المعلومات">
-                    <span class="sidebar-icon"><x-nav-icon name="home" /></span><span x-show="!sidebarCollapsed" x-transition.opacity>لوحة المعلومات</span>
+                    <span class="sidebar-icon"><x-nav-icon name="home" /></span><span x-show="!sidebarCollapsed || !isDesktop" x-transition.opacity>لوحة المعلومات</span>
                 </a>
 
                 @if($teachingProfile)
-                    <p class="sidebar-section" x-show="!sidebarCollapsed">مساحتي كمحفّظ</p>
+                    <p class="sidebar-section" x-show="!sidebarCollapsed || !isDesktop">مساحتي كمحفّظ</p>
                     <div class="mb-2 space-y-1 rounded-2xl border border-emerald-300/15 bg-emerald-950/20 p-1.5">
                         <a class="sidebar-link group {{ request()->routeIs('teacher.daily') ? 'sidebar-link-active' : '' }}" href="{{ route('teacher.daily') }}" title="التسجيل اليومي">
                             <span class="sidebar-icon"><x-nav-icon name="daily" /></span>
-                            <span x-show="!sidebarCollapsed" x-transition.opacity class="min-w-0 flex-1 truncate">التسجيل اليومي</span>
-                            <span x-show="!sidebarCollapsed" class="rounded-full bg-emerald-300/15 px-2 py-0.5 text-[9px] font-black text-emerald-100">اليوم</span>
+                            <span x-show="!sidebarCollapsed || !isDesktop" x-transition.opacity class="min-w-0 flex-1 truncate">التسجيل اليومي</span>
+                            <span x-show="!sidebarCollapsed || !isDesktop" class="rounded-full bg-emerald-300/15 px-2 py-0.5 text-[9px] font-black text-emerald-100">اليوم</span>
+                        </a>
+                        <a class="sidebar-link group {{ request()->routeIs('teacher.mobile.app*') ? 'sidebar-link-active' : '' }}" href="{{ route('teacher.mobile.app') }}" title="تطبيق المحفّظ">
+                            <span class="sidebar-icon"><x-nav-icon name="mobile" /></span>
+                            <span x-show="!sidebarCollapsed || !isDesktop" x-transition.opacity class="min-w-0 flex-1 truncate">تطبيق المحفّظ</span>
                         </a>
                         @can('alerts.view')
                             <a class="sidebar-link group {{ request()->routeIs('alerts.*') && request('scope') === 'teaching' ? 'sidebar-link-active' : '' }}" href="{{ route('alerts.index', ['scope' => 'teaching']) }}" title="تنبيهات طلاب حلقاتي">
                                 <span class="sidebar-icon"><x-nav-icon name="alerts" /></span>
-                                <span x-show="!sidebarCollapsed" x-transition.opacity>تنبيهات طلاب حلقاتي</span>
+                                <span x-show="!sidebarCollapsed || !isDesktop" x-transition.opacity>تنبيهات طلاب حلقاتي</span>
                             </a>
                         @endcan
                     </div>
                 @endif
 
-                <p class="sidebar-section" x-show="!sidebarCollapsed">الإدارة والمتابعة</p>
+                <p class="sidebar-section" x-show="!sidebarCollapsed || !isDesktop">الإدارة والمتابعة</p>
                 @can('organization.view')
                     <a class="sidebar-link group {{ request()->routeIs('organization.*') ? 'sidebar-link-active' : '' }}" href="{{ route('organization.index') }}" title="الهيكل التنظيمي">
-                        <span class="sidebar-icon"><x-nav-icon name="organization" /></span><span x-show="!sidebarCollapsed" x-transition.opacity>الهيكل التنظيمي</span>
+                        <span class="sidebar-icon"><x-nav-icon name="organization" /></span><span x-show="!sidebarCollapsed || !isDesktop" x-transition.opacity>الهيكل التنظيمي</span>
                     </a>
                 @endcan
                 @if(auth()->user()->hasRole('super-admin'))
                     <a class="sidebar-link group {{ request()->routeIs('access.*') ? 'sidebar-link-active' : '' }}" href="{{ route('access.index') }}" title="الحسابات والصلاحيات">
-                        <span class="sidebar-icon"><x-nav-icon name="access" /></span><span x-show="!sidebarCollapsed" x-transition.opacity>الحسابات والصلاحيات</span>
+                        <span class="sidebar-icon"><x-nav-icon name="access" /></span><span x-show="!sidebarCollapsed || !isDesktop" x-transition.opacity>الحسابات والصلاحيات</span>
+                    </a>
+                    <a class="sidebar-link group {{ request()->routeIs('mobile.distribution') ? 'sidebar-link-active' : '' }}" href="{{ route('mobile.distribution') }}" title="توزيع تطبيق المحفّظ">
+                        <span class="sidebar-icon"><x-nav-icon name="mobile" /></span><span x-show="!sidebarCollapsed || !isDesktop" x-transition.opacity>توزيع التطبيق</span>
                     </a>
                 @endif
                 @can('students.view')
                     <a class="sidebar-link group {{ request()->routeIs('students.*') ? 'sidebar-link-active' : '' }}" href="{{ route('students.index') }}" title="الطلاب">
-                        <span class="sidebar-icon"><x-nav-icon name="students" /></span><span x-show="!sidebarCollapsed" x-transition.opacity>الطلاب</span>
+                        <span class="sidebar-icon"><x-nav-icon name="students" /></span><span x-show="!sidebarCollapsed || !isDesktop" x-transition.opacity>الطلاب</span>
                     </a>
                 @endcan
                 @can('courses.manage')
                     <a class="sidebar-link group {{ request()->routeIs('academic.*') ? 'sidebar-link-active' : '' }}" href="{{ route('academic.index') }}" title="الإدارة الأكاديمية">
-                        <span class="sidebar-icon"><x-nav-icon name="academic" /></span><span x-show="!sidebarCollapsed" x-transition.opacity>الإدارة الأكاديمية</span>
+                        <span class="sidebar-icon"><x-nav-icon name="academic" /></span><span x-show="!sidebarCollapsed || !isDesktop" x-transition.opacity>الإدارة الأكاديمية</span>
                     </a>
                 @endcan
                 @can('alerts.view')
                     @if(! $teachingProfile || auth()->user()->can('alerts.manage'))
                         <a class="sidebar-link group {{ request()->routeIs('alerts.*') && request('scope') !== 'teaching' ? 'sidebar-link-active' : '' }}" href="{{ route('alerts.index') }}" title="مركز التنبيهات">
-                            <span class="sidebar-icon"><x-nav-icon name="alerts" /></span><span x-show="!sidebarCollapsed" x-transition.opacity>مركز التنبيهات</span>
+                            <span class="sidebar-icon"><x-nav-icon name="alerts" /></span><span x-show="!sidebarCollapsed || !isDesktop" x-transition.opacity>مركز التنبيهات</span>
                         </a>
                     @endif
                 @endcan
 
-                <p class="sidebar-section" x-show="!sidebarCollapsed">التخطيط والتقارير</p>
+                <p class="sidebar-section" x-show="!sidebarCollapsed || !isDesktop">التخطيط والتقارير</p>
                 @can('calendar.view')
                     <a class="sidebar-link group {{ request()->routeIs('calendar.*') ? 'sidebar-link-active' : '' }}" href="{{ route('calendar.index') }}" title="التقويم">
-                        <span class="sidebar-icon"><x-nav-icon name="calendar" /></span><span x-show="!sidebarCollapsed" x-transition.opacity>التقويم</span>
+                        <span class="sidebar-icon"><x-nav-icon name="calendar" /></span><span x-show="!sidebarCollapsed || !isDesktop" x-transition.opacity>التقويم</span>
                     </a>
                 @endcan
                 @can('reports.view')
                     <a class="sidebar-link group {{ request()->routeIs('reports.*') ? 'sidebar-link-active' : '' }}" href="{{ route('reports.index') }}" title="مركز التقارير">
-                        <span class="sidebar-icon"><x-nav-icon name="reports" /></span><span x-show="!sidebarCollapsed" x-transition.opacity>مركز التقارير</span>
+                        <span class="sidebar-icon"><x-nav-icon name="reports" /></span><span x-show="!sidebarCollapsed || !isDesktop" x-transition.opacity>مركز التقارير</span>
                     </a>
                 @endcan
                 @can('website.manage')
                     <a class="sidebar-link group {{ request()->routeIs('cms.*') ? 'sidebar-link-active' : '' }}" href="{{ route('cms.index') }}" title="إدارة الموقع">
-                        <span class="sidebar-icon"><x-nav-icon name="organization" /></span><span x-show="!sidebarCollapsed" x-transition.opacity>إدارة الموقع</span>
+                        <span class="sidebar-icon"><x-nav-icon name="organization" /></span><span x-show="!sidebarCollapsed || !isDesktop" x-transition.opacity>إدارة الموقع</span>
                     </a>
                 @endcan
             </nav>
@@ -191,7 +205,7 @@
                             {{ mb_substr(auth()->user()->name, 0, 1) }}
                         @endif
                     </span>
-                    <span x-show="!sidebarCollapsed" x-transition.opacity class="min-w-0">
+                    <span x-show="!sidebarCollapsed || !isDesktop" x-transition.opacity class="min-w-0">
                         <span class="block truncate text-sm font-bold">{{ auth()->user()->name }}</span>
                         <span class="block truncate text-[11px] text-emerald-100/60">{{ $teachingProfile && auth()->user()->hasRole('super-admin') ? 'مدير النظام · محفّظ' : ($teachingProfile && auth()->user()->hasRole('center-manager') ? 'مدير مركز · محفّظ' : (auth()->user()->getRoleNames()->first() ?? 'مستخدم')) }}</span>
                     </span>
@@ -202,7 +216,7 @@
         <div class="app-content-shell min-h-screen transition-[padding] duration-300 ease-out">
             <header class="app-topbar-shell sticky top-0 z-30 h-20 border-b border-slate-200/75 bg-white/88 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
                 <div class="mx-auto flex h-full max-w-[1600px] items-center gap-3">
-                    <button type="button" class="btn-ghost" @click="toggleSidebar()" :aria-label="sidebarCollapsed ? 'توسيع القائمة الجانبية' : 'طي القائمة الجانبية'">
+                    <button type="button" class="btn-ghost" @click="toggleSidebar()" aria-controls="app-sidebar" :aria-expanded="isDesktop ? !sidebarCollapsed : sidebarOpen" :aria-label="isDesktop ? (sidebarCollapsed ? 'توسيع القائمة الجانبية' : 'طي القائمة الجانبية') : (sidebarOpen ? 'إغلاق القائمة' : 'فتح القائمة')">
                         <x-nav-icon name="menu" class="size-5 lg:hidden" />
                         <x-nav-icon name="collapse" class="hidden size-5 transition-transform duration-300 lg:block" ::class="sidebarCollapsed ? 'rotate-180' : ''" />
                     </button>

@@ -16,39 +16,10 @@
 @endphp
 
 <div
-    x-data="{
-        show: false,
-        remaining: {{ (int) $duration }},
-        timer: null,
-        startedAt: null,
-        start() {
-            if (this.remaining <= 0) return;
-            this.startedAt = Date.now();
-            this.timer = setTimeout(() => this.close(), this.remaining);
-        },
-        pause() {
-            if (!this.timer) return;
-            clearTimeout(this.timer);
-            this.timer = null;
-            this.remaining = Math.max(0, this.remaining - (Date.now() - this.startedAt));
-        },
-        close() {
-            clearTimeout(this.timer);
-            this.timer = null;
-            this.show = false;
-        }
-    }"
-    x-init="$nextTick(() => { show = true; start(); })"
-    x-show="show"
-    x-cloak
-    x-transition:enter="transition duration-500 ease-out"
-    x-transition:enter-start="translate-x-6 opacity-0"
-    x-transition:enter-end="translate-x-0 opacity-100"
-    x-transition:leave="transition duration-250 ease-in"
-    x-transition:leave-start="translate-x-0 opacity-100"
-    x-transition:leave-end="translate-x-5 opacity-0"
-    @mouseenter="pause()"
-    @mouseleave="start()"
+    data-feedback-alert
+    data-feedback-duration="{{ (int) $duration }}"
+    wire:key="feedback-{{ hash('sha256', $type.'|'.$title.'|'.($message ?? (string) $slot)) }}"
+    wire:ignore.self
     class="feedback-alert relative isolate w-full overflow-hidden rounded-3xl border {{ $border }} bg-white shadow-[0_24px_70px_-35px_rgba(15,23,42,.35)]"
     role="{{ $type === 'error' ? 'alert' : 'status' }}"
     aria-live="{{ $type === 'error' ? 'assertive' : 'polite' }}"
@@ -72,7 +43,7 @@
                 @if($message !== null){{ $message }}@else{{ $slot }}@endif
             </div>
         </div>
-        <button type="button" @click="close()" class="grid size-8 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="إغلاق التنبيه">
+        <button data-feedback-dismiss type="button" class="grid size-8 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="إغلاق التنبيه">
             <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg>
         </button>
     </div>

@@ -1,6 +1,6 @@
 <x-public-shell title="الرئيسية" description="مركز الغفران لتحفيظ القرآن الكريم — تعليم متقن، متابعة يومية، ورعاية تربوية متكاملة.">
-    <section class="relative isolate overflow-hidden border-b border-emerald-950/8 bg-[#f7fbf8]">
-        <div aria-hidden="true" class="absolute inset-0 opacity-[.035]" style="background-image:linear-gradient(#065f46 1px,transparent 1px),linear-gradient(90deg,#065f46 1px,transparent 1px);background-size:52px 52px"></div>
+    <section class="public-hero relative isolate overflow-hidden border-b border-emerald-950/8 bg-[#f7fbf8]">
+        <div aria-hidden="true" class="public-hero-grid-pattern absolute inset-0 opacity-[.035]" style="background-image:linear-gradient(#065f46 1px,transparent 1px),linear-gradient(90deg,#065f46 1px,transparent 1px);background-size:52px 52px"></div>
         <div aria-hidden="true" class="absolute -right-40 -top-52 size-[34rem] rounded-full border-[90px] border-emerald-800/[.045]"></div>
         <div aria-hidden="true" class="absolute -bottom-48 left-[12%] size-[30rem] rounded-full bg-amber-200/25 blur-3xl"></div>
 
@@ -37,7 +37,7 @@
 
             <div class="relative mx-auto w-full max-w-[34rem] px-3 py-8 sm:px-8">
                 <div aria-hidden="true" class="absolute inset-x-8 top-1/2 h-[70%] -translate-y-1/2 rounded-[4rem] bg-emerald-700/10 blur-2xl"></div>
-                <div class="relative overflow-hidden rounded-[2.75rem] border border-white/15 bg-[linear-gradient(145deg,#0b5b43_0%,#063b31_62%,#052d27_100%)] p-6 text-white shadow-[0_45px_100px_-40px_rgba(3,52,42,.8)] sm:p-8">
+                <div class="public-hero-card relative overflow-hidden rounded-[2.75rem] border border-white/15 bg-[linear-gradient(145deg,#0b5b43_0%,#063b31_62%,#052d27_100%)] p-6 text-white shadow-[0_45px_100px_-40px_rgba(3,52,42,.8)] sm:p-8">
                     <div aria-hidden="true" class="absolute inset-0 opacity-[.12]" style="background-image:radial-gradient(circle,#fff 1px,transparent 1.5px);background-size:26px 26px"></div>
                     <div aria-hidden="true" class="absolute -left-24 -top-24 size-64 rounded-full border-[50px] border-emerald-200/10"></div>
 
@@ -54,7 +54,7 @@
 
                         <div class="mt-8 rounded-3xl border border-white/10 bg-white/[.07] p-4 backdrop-blur-sm">
                             <div class="flex items-end justify-between"><div><p class="text-[10px] font-bold text-emerald-100/55">رحلة هذا الأسبوع</p><p class="mt-1 text-sm font-black">حفظ · مراجعة · تثبيت</p></div><p class="text-2xl font-black text-emerald-300">87<span class="text-xs">%</span></p></div>
-                            <div class="mt-4 h-2 overflow-hidden rounded-full bg-black/20"><div class="h-full w-[87%] rounded-full bg-gradient-to-l from-emerald-300 to-amber-300"></div></div>
+                            <div class="mt-4 h-2 overflow-hidden rounded-full bg-black/20"><div class="public-progress-fill h-full w-[87%] rounded-full bg-gradient-to-l from-emerald-300 to-amber-300"></div></div>
                         </div>
                     </div>
                 </div>
@@ -88,14 +88,15 @@
                     ['programs', 'برنامجًا نوعيًا', 'مسارات تناسب الاحتياج', 'crescent'],
                     ['achievements', 'إنجازًا موثّقًا', 'ثمرة متابعة وإتقان', 'certificate'],
                 ] as [$key, $label, $caption, $icon])
-                    <div class="group flex items-center gap-4 p-6 transition duration-300 hover:bg-emerald-50/50 lg:p-7">
+                    <div class="public-stat-item group flex items-center gap-4 p-6 transition duration-300 hover:bg-emerald-50/50 lg:p-7">
                         <span class="grid size-12 shrink-0 place-items-center rounded-2xl bg-emerald-50 text-emerald-700 transition duration-300 group-hover:bg-emerald-700 group-hover:text-white"><x-islamic-icon :name="$icon" /></span>
-                        <span><span class="block text-2xl font-black text-emerald-950">{{ number_format($stats[$key]) }}+</span><span class="block text-sm font-black text-slate-700">{{ $label }}</span><span class="mt-1 block text-[11px] text-slate-400">{{ $caption }}</span></span>
+                        <span><span class="block text-2xl font-black text-emerald-950"><span class="public-counter" data-public-counter="{{ $stats[$key] }}">{{ number_format($stats[$key]) }}</span>+</span><span class="block text-sm font-black text-slate-700">{{ $label }}</span><span class="mt-1 block text-[11px] text-slate-400">{{ $caption }}</span></span>
                     </div>
                 @endforeach
             </div>
         </div>
     </section>
+
 
     <section class="mx-auto max-w-7xl px-4 pb-24 sm:px-6 lg:px-8">
         <div class="mx-auto max-w-3xl text-center">
@@ -111,7 +112,7 @@
                 ['02', 'متابعة مستمرة', 'يُسجّل الحفظ والمراجعة والتقييم بوضوح، لتبقى صورة التقدّم دقيقة كل يوم.', 'mosque'],
                 ['03', 'إتقان ونمو', 'تُعالج مواطن الضعف بخطة مناسبة، ويُحتفى بكل محطة نجاح في رحلة الطالب.', 'certificate'],
             ] as [$number, $heading, $description, $icon])
-                <article class="group relative rounded-[2rem] border border-slate-200/80 bg-white p-7 shadow-[0_20px_70px_-48px_rgba(6,78,59,.45)] transition duration-300 hover:-translate-y-1 hover:border-emerald-200 hover:shadow-[0_28px_80px_-45px_rgba(6,78,59,.5)]">
+                <article class="public-feature-card group relative rounded-[2rem] border border-slate-200/80 bg-white p-7 shadow-[0_20px_70px_-48px_rgba(6,78,59,.45)] transition duration-300 hover:border-emerald-200 hover:shadow-[0_28px_80px_-45px_rgba(6,78,59,.5)]">
                     <div class="flex items-center justify-between"><span class="grid size-14 place-items-center rounded-2xl bg-emerald-950 text-emerald-200 shadow-lg shadow-emerald-950/15"><x-islamic-icon :name="$icon" class="size-6" /></span><span class="text-4xl font-black text-emerald-950/[.07]">{{ $number }}</span></div>
                     <h3 class="mt-6 text-xl font-black text-emerald-950">{{ $heading }}</h3>
                     <p class="mt-3 text-sm leading-7 text-slate-500">{{ $description }}</p>
@@ -131,7 +132,7 @@
 
             <div data-reveal-group="up" data-reveal-stagger="60" class="mt-11 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
                 @forelse($programs as $index => $program)
-                    <article class="group flex min-h-64 flex-col rounded-[2rem] border border-white/10 bg-white/[.065] p-6 backdrop-blur-sm transition duration-300 hover:-translate-y-1 hover:border-emerald-300/30 hover:bg-white/[.1]">
+                    <article class="public-program-card group flex min-h-64 flex-col rounded-[2rem] border border-white/10 bg-white/[.065] p-6 backdrop-blur-sm transition duration-300 hover:border-emerald-300/30 hover:bg-white/[.1]">
                         <div class="flex items-center justify-between"><span class="grid size-11 place-items-center rounded-2xl bg-emerald-300/15 text-emerald-200"><x-islamic-icon :name="['quran', 'crescent', 'mosque', 'certificate'][$index % 4]" /></span><span class="text-xs font-black text-white/20">0{{ $index + 1 }}</span></div>
                         <h3 class="mt-6 text-lg font-black leading-7">{{ $program->name }}</h3>
                         <p class="mt-2 line-clamp-3 text-sm leading-7 text-emerald-100/55">{{ $program->description ?: 'برنامج تعليمي نوعي مصمم بعناية ليصنع تقدّمًا واضحًا ومستمرًا.' }}</p>

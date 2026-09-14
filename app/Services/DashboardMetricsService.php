@@ -16,21 +16,24 @@ use Illuminate\Database\Eloquent\Builder;
 
 class DashboardMetricsService
 {
-    public function __construct(private readonly StudentVisibilityService $visibility) {}
+    public function __construct(
+        private readonly StudentVisibilityService $visibility,
+        private readonly StudentPeriodRankingService $rankings,
+    ) {}
 
     public function for(User $user, array $filters): array
     {
         try {
-            $from = Carbon::parse($filters['date_from'] ?? today()->subDays(29))->startOfDay();
+            $from = Carbon::parse($filters['date_from'] ?? today()->startOfMonth())->startOfDay();
             $to = Carbon::parse($filters['date_to'] ?? today())->endOfDay();
         } catch (\Throwable) {
-            $from = today()->subDays(29)->startOfDay();
+            $from = today()->startOfMonth()->startOfDay();
             $to = today()->endOfDay();
         }
         if ($from->gt($to)) {
             [$from, $to] = [$to->copy()->startOfDay(), $from->copy()->endOfDay()];
         }
-        $students = $this->filteredStudents($user, $filters);
+        $students = $this->filteredStudents($user, $filters, $from, $to);
         $studentIds = (clone $students)->select('students.id');
         $attendance = Attendance::query()->whereIn('student_id', clone $studentIds)->whereDate('record_date', '>=', $from)->whereDate('record_date', '<=', $to);
         $records = DailyRecord::query()->whereIn('student_id', clone $studentIds)->whereDate('record_date', '>=', $from)->whereDate('record_date', '<=', $to);
@@ -47,7 +50,7 @@ class DashboardMetricsService
         $late = (int) ($attendanceCounts['late'] ?? 0);
         $absent = (int) ($attendanceCounts['absent'] ?? 0);
         $excused = (int) ($attendanceCounts['excused'] ?? 0);
-        $attendanceDenominator = $present + $late + $absent;
+        $attendanceDenominator = $present + $late + $absent + $excused;
 
         $activeAlerts = $user->can('alerts.view')
             ? StudentAlert::query()->whereIn('student_id', clone $studentIds)->whereIn('status', ['open', 'acknowledged'])
@@ -107,6 +110,7 @@ class DashboardMetricsService
             'monthly_trend' => $this->monthlyTrend($trendRows, $to),
             'levels' => $levels,
             'halaqa_performance' => $this->halaqaPerformance($studentIds, $from, $to),
+            'student_rankings' => $this->rankings->calculate($visibleStudents, $from, $to),
             'students' => $visibleStudents->sortBy(fn (Student $student) => $student->latestProgress?->score ?? -1)->take(8)->values(),
             'alerts' => (clone $activeAlerts)->with(['student:id,full_name,first_name,family_name,photo_private_file_id', 'student.photo:id', 'halaqa:id,name'])->orderByRaw("CASE severity WHEN 'critical' THEN 1 WHEN 'warning' THEN 2 ELSE 3 END")->latest('generated_at')->limit(8)->get(),
             'teacher_today' => $this->teacherToday($user),
@@ -114,12 +118,15 @@ class DashboardMetricsService
     }
 
     /** @return Builder<Student> */
-    private function filteredStudents(User $user, array $filters): Builder
+    private function filteredStudents(User $user, array $filters, Carbon $from, Carbon $to): Builder
     {
         return $this->visibility->queryFor($user)
             ->when($filters['branch_id'] ?? null, fn ($query, $branch) => $query->whereHas('currentHalaqa', fn ($halaqa) => $halaqa->where('branch_id', $branch)))
             ->when($filters['halaqa_id'] ?? null, fn ($query, $halaqa) => $query->where('current_halaqa_id', $halaqa))
-            ->when($filters['teacher_id'] ?? null, fn ($query, $teacher) => $query->whereHas('currentHalaqa.teacherAssignments', fn ($assignments) => $assignments->where('teacher_profile_id', $teacher)->whereNull('ends_at')))
+            ->when($filters['teacher_id'] ?? null, fn ($query, $teacher) => $query->whereHas('currentHalaqa.teacherAssignments', fn ($assignments) => $assignments
+                ->where('teacher_profile_id', $teacher)
+                ->whereDate('starts_at', '<=', $to)
+                ->where(fn ($dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', $from))))
             ->when($filters['student_id'] ?? null, fn ($query, $student) => $query->whereKey($student))
             ->when($filters['program'] ?? null, fn ($query, $program) => $query->whereHas('currentHalaqa', fn ($halaqa) => $halaqa->where('program', $program)));
     }
@@ -203,7 +210,11 @@ class DashboardMetricsService
             return $user->teacherProfile?->active ? 1 : 0;
         }
 
+        $centerId = $this->centerIdFor($user);
+
         return TeacherProfile::query()->where('active', true)
+            ->when($centerId, fn ($query) => $query->where('center_id', $centerId))
+            ->when(! $user->hasRole('super-admin') && ! $centerId, fn ($query) => $query->whereRaw('1 = 0'))
             ->when($filters['branch_id'] ?? null, fn ($query, $branch) => $query->where('branch_id', $branch))
             ->when($filters['teacher_id'] ?? null, fn ($query, $teacher) => $query->whereKey($teacher))
             ->count();
@@ -211,7 +222,10 @@ class DashboardMetricsService
 
     private function halaqaCount(User $user, array $filters): int
     {
+        $centerId = $this->centerIdFor($user);
         $query = Halaqa::query()->where('active', true)
+            ->when($centerId, fn ($query) => $query->where('center_id', $centerId))
+            ->when(! $user->hasRole('super-admin') && ! $centerId && ! $user->requiresTeacherAssignmentScope(), fn ($query) => $query->whereRaw('1 = 0'))
             ->when($filters['branch_id'] ?? null, fn ($query, $branch) => $query->where('branch_id', $branch))
             ->when($filters['halaqa_id'] ?? null, fn ($query, $halaqa) => $query->whereKey($halaqa))
             ->when($filters['program'] ?? null, fn ($query, $program) => $query->where('program', $program));
@@ -220,6 +234,17 @@ class DashboardMetricsService
         }
 
         return $query->count();
+    }
+
+    private function centerIdFor(User $user): ?int
+    {
+        if ($user->hasRole('super-admin') || $user->requiresTeacherAssignmentScope()) {
+            return null;
+        }
+
+        $centerId = $user->staffProfile?->center_id ?? $user->teacherProfile?->center_id;
+
+        return $centerId ? (int) $centerId : null;
     }
 
     private function teacherToday(User $user): ?array

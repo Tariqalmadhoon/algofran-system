@@ -6,6 +6,7 @@ use App\Models\Branch;
 use App\Models\Center;
 use App\Models\Halaqa;
 use App\Models\StaffProfile;
+use App\Models\Student;
 use App\Models\TeacherProfile;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -47,6 +48,11 @@ class SequentialCodeService
     public function teacherEmployeeNumber(): string
     {
         return $this->next('organization.employee.teacher', 'TCH', 4, TeacherProfile::query(), 'employee_number');
+    }
+
+    public function studentNumber(): string
+    {
+        return $this->next('students.number', 'STD', 5, Student::query()->withTrashed(), 'student_number');
     }
 
     /**

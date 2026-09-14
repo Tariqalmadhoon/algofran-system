@@ -21,14 +21,18 @@ function Invoke-DeploymentStep {
 
 Set-Location -LiteralPath (Resolve-Path -LiteralPath $ProjectDirectory)
 
-Invoke-DeploymentStep $ComposerCommand @('install', '--no-dev', '--prefer-dist', '--optimize-autoloader', '--no-interaction')
-Invoke-DeploymentStep $NpmCommand @('ci')
-Invoke-DeploymentStep $NpmCommand @('run', 'build')
-
-$maintenanceEnabled = $false
+$deploymentLock = [System.IO.File]::Open(
+    (Join-Path (Get-Location).Path 'storage/framework/deploy.lock'),
+    [System.IO.FileMode]::OpenOrCreate,
+    [System.IO.FileAccess]::ReadWrite,
+    [System.IO.FileShare]::None
+)
 try {
     Invoke-DeploymentStep $PhpCommand @('artisan', 'down', '--retry=60', '--refresh=15')
-    $maintenanceEnabled = $true
+    Invoke-DeploymentStep $ComposerCommand @('install', '--no-dev', '--prefer-dist', '--optimize-autoloader', '--no-interaction')
+    Invoke-DeploymentStep $NpmCommand @('ci')
+    Invoke-DeploymentStep $NpmCommand @('run', 'build')
+    Invoke-DeploymentStep $PhpCommand @('artisan', 'config:clear')
     Invoke-DeploymentStep $PhpCommand @('artisan', 'migrate', '--force')
     Invoke-DeploymentStep $PhpCommand @('artisan', 'storage:link')
     Invoke-DeploymentStep $PhpCommand @('artisan', 'optimize')
@@ -36,12 +40,13 @@ try {
     Invoke-DeploymentStep $PhpCommand @('artisan', 'queue:restart')
     Invoke-DeploymentStep $PhpCommand @('artisan', 'reverb:restart')
     Invoke-DeploymentStep $PhpCommand @('artisan', 'up')
-    $maintenanceEnabled = $false
+}
+catch {
+    Write-Warning 'Deployment failed; maintenance remains enabled. Complete or recover the release before running artisan up.'
+    throw
 }
 finally {
-    if ($maintenanceEnabled) {
-        & $PhpCommand artisan up
-    }
+    $deploymentLock.Dispose()
 }
 
 Write-Host 'Deployment completed successfully.'

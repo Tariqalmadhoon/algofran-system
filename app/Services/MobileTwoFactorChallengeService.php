@@ -12,7 +12,7 @@ class MobileTwoFactorChallengeService
     public function __construct(private readonly TwoFactorAuthenticationService $twoFactor) {}
 
     /** @return array{token:string,expires_in:int} */
-    public function issue(User $user, string $deviceName): array
+    public function issue(User $user, string $deviceName, array $device = []): array
     {
         $ttl = (int) config('system.identity.challenge_ttl_seconds', 300);
         $token = Str::random(80);
@@ -21,6 +21,7 @@ class MobileTwoFactorChallengeService
         Cache::put($this->key($token), [
             'user_id' => $user->id,
             'device_name' => $deviceName,
+            'device' => $device,
             'attempts' => 0,
             'expires_at' => $expiresAt->getTimestamp(),
         ], $expiresAt);
@@ -28,7 +29,7 @@ class MobileTwoFactorChallengeService
         return ['token' => $token, 'expires_in' => $ttl];
     }
 
-    /** @return array{user:User,device_name:string}|null */
+    /** @return array{user:User,device_name:string,device:array}|null */
     public function consume(string $token, ?string $code, ?string $recoveryCode): ?array
     {
         $key = $this->key($token);
@@ -57,7 +58,11 @@ class MobileTwoFactorChallengeService
 
                 Cache::forget($key);
 
-                return ['user' => $user, 'device_name' => (string) $challenge['device_name']];
+                return [
+                    'user' => $user,
+                    'device_name' => (string) $challenge['device_name'],
+                    'device' => (array) ($challenge['device'] ?? []),
+                ];
             });
         } catch (Throwable) {
             return null;

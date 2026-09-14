@@ -35,9 +35,7 @@ class RecordStudentDailyRecordAction
     public function execute(Student $student, Halaqa $halaqa, TeacherProfile $teacher, array $data, User $actor): DailyRecord
     {
         return DB::transaction(function () use ($student, $halaqa, $teacher, $data, $actor) {
-            $date = Carbon::parse($data['record_date'])->startOfDay();
-            $this->ensureActorCanRecord($actor, $teacher, $halaqa, $date);
-            $this->ensureStudentWasEnrolled($student, $halaqa, $date);
+            $date = $this->ensureCanRecord($student, $halaqa, $teacher, $data['record_date'], $actor);
 
             if ($student->dailyRecords()->whereDate('record_date', $date)->exists()) {
                 throw ValidationException::withMessages(['record_date' => 'يوجد سجل يومي لهذا الطالب في التاريخ المحدد.']);
@@ -49,8 +47,12 @@ class RecordStudentDailyRecordAction
                 : EvaluationRating::from($data['general_evaluation'])->value;
             $items = array_values(array_filter($data['items'] ?? [], fn (array $item) => ! empty($item['enabled'])));
 
-            if ($attendanceStatus === AttendanceStatus::Absent && count($items) > 0) {
-                throw ValidationException::withMessages(['items' => 'لا يمكن تسجيل تسميع لطالب غائب.']);
+            if ($attendanceStatus->isAbsence() && count($items) > 0) {
+                throw ValidationException::withMessages(['items' => 'لا يمكن تسجيل تسميع للطالب الغائب، سواء كان الغياب بعذر أو دون عذر.']);
+            }
+
+            if ($attendanceStatus->isAbsence()) {
+                $generalEvaluation = null;
             }
 
             $validatedItems = [];
@@ -111,11 +113,25 @@ class RecordStudentDailyRecordAction
                 'items_count' => count($validatedItems),
             ]);
             $snapshot = $this->progress->snapshot($student);
-            $this->alerts->evaluate($student->refresh(), $snapshot);
+            $this->alerts->evaluate($student->refresh(), $snapshot, $date);
             $this->achievements->evaluate($student, $snapshot);
 
             return $record->load(['attendance', 'recitationItems.startAyah.surah', 'recitationItems.endAyah.surah']);
         });
+    }
+
+    public function ensureCanRecord(
+        Student $student,
+        Halaqa $halaqa,
+        TeacherProfile $teacher,
+        string $recordDate,
+        User $actor,
+    ): Carbon {
+        $date = Carbon::parse($recordDate)->startOfDay();
+        $this->ensureActorCanRecord($actor, $teacher, $halaqa, $date);
+        $this->ensureStudentWasEnrolled($student, $halaqa, $date);
+
+        return $date;
     }
 
     private function ensureActorCanRecord(User $actor, TeacherProfile $teacher, Halaqa $halaqa, Carbon $date): void

@@ -1,10 +1,10 @@
 @props(['item', 'routeName', 'kind' => null])
 
-<article {{ $attributes->class('group h-full overflow-hidden rounded-[2rem] border border-emerald-950/8 bg-white shadow-[0_20px_70px_-45px_rgba(6,78,59,.45)] transition duration-500 hover:-translate-y-2 hover:border-emerald-200 hover:shadow-[0_30px_85px_-42px_rgba(6,78,59,.55)]') }}>
+<article {{ $attributes->class('public-content-card group h-full overflow-hidden rounded-[2rem] border border-emerald-950/8 bg-white shadow-[0_20px_70px_-45px_rgba(6,78,59,.45)] transition duration-500 hover:border-emerald-200 hover:shadow-[0_30px_85px_-42px_rgba(6,78,59,.55)]') }}>
     <a href="{{ route($routeName, $item) }}" class="flex h-full flex-col">
         <div class="relative aspect-[16/10] overflow-hidden bg-[linear-gradient(135deg,#dff8ea,#b8ead2)]">
             @if($item->featuredMedia)
-                <img src="{{ $item->featuredMedia->url }}" alt="{{ $item->featuredMedia->alt_text ?: $item->title }}" class="size-full object-cover transition duration-700 group-hover:scale-105" loading="lazy">
+                <img src="{{ $item->featuredMedia->url }}" alt="{{ $item->featuredMedia->alt_text ?: $item->title }}" class="size-full object-cover transition duration-700 group-hover:scale-105" loading="lazy" decoding="async">
             @else
                 <div class="absolute inset-0 opacity-35 [background-image:radial-gradient(circle_at_20%_30%,#059669_0_2px,transparent_3px)] [background-size:28px_28px]"></div>
                 <span class="absolute inset-0 grid place-items-center"><x-brand-logo size="lg" class="opacity-65" /></span>
