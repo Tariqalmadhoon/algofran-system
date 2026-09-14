@@ -83,6 +83,15 @@ class PhaseSevenOperationsTest extends TestCase
 
     public function test_production_check_accepts_a_hardened_configuration(): void
     {
+        $storageLink = public_path('storage');
+        $storageTarget = storage_path('app/public');
+        $createdStorageLink = ! is_link($storageLink) && ! file_exists($storageLink);
+
+        if ($createdStorageLink) {
+            File::ensureDirectoryExists($storageTarget);
+            $this->artisan('storage:link')->assertSuccessful();
+        }
+
         config([
             'app.env' => 'production',
             'app.debug' => false,
@@ -104,12 +113,18 @@ class PhaseSevenOperationsTest extends TestCase
             'reverb.apps.apps.0.allowed_origins' => ['alquran.example'],
         ]);
 
-        $exitCode = Artisan::call('system:production-check', ['--json' => true]);
-        $result = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+        try {
+            $exitCode = Artisan::call('system:production-check', ['--json' => true]);
+            $result = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
 
-        $this->assertSame(0, $exitCode, json_encode($result, JSON_PRETTY_PRINT));
-        $this->assertSame('ready', $result['status']);
-        $this->assertNotEmpty($result['checks']);
+            $this->assertSame(0, $exitCode, json_encode($result, JSON_PRETTY_PRINT));
+            $this->assertSame('ready', $result['status']);
+            $this->assertNotEmpty($result['checks']);
+        } finally {
+            if ($createdStorageLink && is_link($storageLink) && realpath($storageLink) === realpath($storageTarget)) {
+                File::delete($storageLink);
+            }
+        }
     }
 
     public function test_backup_manifest_detects_artifact_tampering(): void

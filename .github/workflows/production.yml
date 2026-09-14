@@ -52,12 +52,14 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Run application tests
-        run: php artisan test
-
       - name: Build production assets
+        # Feature tests render Blade layouts. A clean CI checkout must have the
+        # Vite manifest before those views are exercised.
         # Shared hosting uses polling; no Reverb credentials enter this artifact.
         run: VITE_REVERB_APP_KEY= npm run build
+
+      - name: Run application tests
+        run: php artisan test
 
       - name: Package frontend assets for hosts without Node.js
         run: tar -cf web-assets.tar -C public build

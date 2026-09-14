@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 750" role="img" aria-label="Teacher meeting">
+  <defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#ecfdf5"/><stop offset="1" stop-color="#ccfbf1"/></linearGradient><filter id="s"><feDropShadow dx="0" dy="18" stdDeviation="16" flood-color="#064e3b" flood-opacity=".22"/></filter></defs>
+  <rect width="1200" height="750" fill="url(#bg)"/><circle cx="1060" cy="95" r="190" fill="#fbbf24" opacity=".14"/><circle cx="130" cy="660" r="220" fill="#10b981" opacity=".1"/>
+  <g filter="url(#s)"><rect x="260" y="100" width="680" height="350" rx="34" fill="#064e3b" stroke="#d6b56d" stroke-width="8"/><path d="M340 190h280m-280 58h455m-455 58h370" stroke="#fff" stroke-opacity=".72" stroke-width="18" stroke-linecap="round"/><circle cx="790" cy="194" r="55" fill="none" stroke="#fcd34d" stroke-width="13"/></g>
+  <g transform="translate(250 550)"><g><circle cx="90" r="55" fill="#d6a36e"/><path d="M20 155c4-90 34-124 70-124s66 34 70 124" fill="#047857"/></g><g transform="translate(260)"><circle cx="90" r="55" fill="#c98f5a"/><path d="M20 155c4-90 34-124 70-124s66 34 70 124" fill="#0f766e"/></g><g transform="translate(520)"><circle cx="90" r="55" fill="#dfad78"/><path d="M20 155c4-90 34-124 70-124s66 34 70 124" fill="#b88932"/></g></g>
+</svg>

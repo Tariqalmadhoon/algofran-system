@@ -28,6 +28,8 @@ class GofranManualTestingSeederTest extends TestCase
 
     public function test_seeder_builds_the_exact_manual_testing_dataset_and_is_idempotent(): void
     {
+        Storage::fake('public');
+
         $legacyAuthor = User::factory()->create();
         $preservedContent = CmsContent::query()->create([
             'type' => 'news',
@@ -114,7 +116,10 @@ class GofranManualTestingSeederTest extends TestCase
         $this->assertSame(6, CmsContent::query()->where('slug', 'like', 'gofran-%')->count());
         $this->assertSame(4, CmsMedia::query()->where('path', 'like', 'cms/gofran/%')->count());
         $this->assertSame(3, CmsContent::query()->published()->ofType('activity')->where('slug', 'like', 'gofran-%')->count());
-        Storage::disk('public')->assertExists('cms/gofran/quran-semester.svg');
+        CmsMedia::query()
+            ->where('path', 'like', 'cms/gofran/%')
+            ->pluck('path')
+            ->each(fn (string $path) => Storage::disk('public')->assertExists($path));
         $this->get(route('news.index'))
             ->assertOk()
             ->assertSee('انطلاق الفصل القرآني الجديد في مركز الغفران');
