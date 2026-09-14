@@ -5,7 +5,7 @@ use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordConfirmationController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\TwoFactorChallengeController;
-use App\Http\Controllers\ContactMessageController;
+use App\Http\Controllers\MobileDistributionController;
 use App\Http\Controllers\PrivateFileController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicSiteController;
@@ -13,6 +13,7 @@ use App\Http\Controllers\ReadinessController;
 use App\Http\Controllers\SecurityController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\TeacherDailyController;
+use App\Http\Controllers\TeacherMobileAppController;
 use App\Http\Middleware\EnsureStrongIdentity;
 use App\Http\Middleware\EnsureSuperAdministrator;
 use App\Http\Middleware\EnsureUserIsActive;
@@ -28,7 +29,6 @@ Route::get('/news/{content:slug}', [PublicSiteController::class, 'newsItem'])->n
 Route::get('/achievements', [PublicSiteController::class, 'achievements'])->name('public.achievements');
 Route::get('/gallery', [PublicSiteController::class, 'gallery'])->name('public.gallery');
 Route::get('/contact', [PublicSiteController::class, 'contact'])->name('public.contact');
-Route::post('/contact', [ContactMessageController::class, 'store'])->middleware('throttle:5,1')->name('public.contact.store');
 Route::get('/sitemap.xml', [PublicSiteController::class, 'sitemap'])->name('public.sitemap');
 Route::get('/robots.txt', [PublicSiteController::class, 'robots'])->name('public.robots');
 Route::get('/ready', ReadinessController::class)->middleware('throttle:30,1')->name('system.ready');
@@ -81,6 +81,13 @@ Route::middleware(['auth', EnsureUserIsActive::class, 'auth.session', EnsureStro
     Route::get('/students', [StudentController::class, 'index'])->name('students.index');
     Route::get('/students/{student}', [StudentController::class, 'show'])->name('students.show');
     Route::get('/teacher/daily', TeacherDailyController::class)->name('teacher.daily');
+    Route::get('/teacher/mobile-app', TeacherMobileAppController::class)
+        ->middleware('can:recitations.create')
+        ->name('teacher.mobile.app');
+    Route::get('/teacher/mobile-app/download/{versionCode}', [TeacherMobileAppController::class, 'download'])
+        ->middleware('can:recitations.create')
+        ->whereNumber('versionCode')
+        ->name('teacher.mobile.app.download');
 
     Route::view('/academic', 'academic.index')
         ->middleware('can:courses.manage')
@@ -100,6 +107,9 @@ Route::middleware(['auth', EnsureUserIsActive::class, 'auth.session', EnsureStro
     Route::view('/cms', 'cms.index')
         ->middleware('can:website.manage')
         ->name('cms.index');
+    Route::get('/mobile-distribution', MobileDistributionController::class)
+        ->middleware(EnsureSuperAdministrator::class)
+        ->name('mobile.distribution');
 
     Route::get('/private-files/{privateFile}', [PrivateFileController::class, 'show'])
         ->name('private-files.show');

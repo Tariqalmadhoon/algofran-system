@@ -7,6 +7,10 @@ use App\Http\Controllers\Api\V1\CalendarController;
 use App\Http\Controllers\Api\V1\CourseController;
 use App\Http\Controllers\Api\V1\HalaqaController;
 use App\Http\Controllers\Api\V1\MetaController;
+use App\Http\Controllers\Api\V1\MobileProfileController;
+use App\Http\Controllers\Api\V1\MobileReleaseController;
+use App\Http\Controllers\Api\V1\MobileReportExportController;
+use App\Http\Controllers\Api\V1\MobileSyncController;
 use App\Http\Controllers\Api\V1\StudentController;
 use App\Http\Middleware\AddApiVersionHeader;
 use App\Http\Middleware\EnsureStrongIdentity;
@@ -21,6 +25,13 @@ Route::prefix('v1')->middleware(['throttle:api', AddApiVersionHeader::class])->g
     Route::middleware(['auth:sanctum', EnsureUserIsActive::class, EnsureStrongIdentity::class, 'abilities:mobile:read'])->group(function () {
         Route::get('/user', [AuthController::class, 'current']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
+
+        Route::middleware('can:recitations.create')->group(function () {
+            Route::get('/mobile/releases/latest', [MobileReleaseController::class, 'latest']);
+            Route::get('/mobile/releases/android/{versionCode}/download', [MobileReleaseController::class, 'download'])
+                ->whereNumber('versionCode')
+                ->name('api.v1.mobile-releases.android.download');
+        });
 
         Route::get('/halaqas', [HalaqaController::class, 'index'])->middleware('can:halaqas.view');
 
@@ -41,5 +52,29 @@ Route::prefix('v1')->middleware(['throttle:api', AddApiVersionHeader::class])->g
 
         Route::get('/calendar', [CalendarController::class, 'index'])->middleware('can:calendar.view');
         Route::get('/alerts', [AlertController::class, 'index'])->middleware('can:alerts.view');
+
+        Route::prefix('mobile')->group(function () {
+            Route::middleware('can:students.view')->group(function () {
+                Route::get('/profile', [MobileProfileController::class, 'teacher']);
+                Route::get('/students/{student}/profile', [MobileProfileController::class, 'student']);
+            });
+
+            Route::middleware(['can:recitations.export', 'abilities:mobile:export'])->group(function () {
+                Route::get('/report-exports', [MobileReportExportController::class, 'index']);
+                Route::post('/report-exports', [MobileReportExportController::class, 'store']);
+                Route::get('/report-exports/{reportExport:uuid}', [MobileReportExportController::class, 'show']);
+                Route::get('/report-exports/{reportExport:uuid}/download', [MobileReportExportController::class, 'download'])
+                    ->name('api.v1.mobile.report-exports.download');
+            });
+
+            Route::middleware(['can:recitations.create', 'can:attendance.manage'])->group(function () {
+                Route::get('/bootstrap', [MobileSyncController::class, 'bootstrap']);
+                Route::get('/sync/changes', [MobileSyncController::class, 'changes']);
+                Route::post('/sync/daily-records', [MobileSyncController::class, 'push'])
+                    ->middleware('abilities:mobile:sync');
+                Route::post('/sync/student-operations', [MobileSyncController::class, 'students'])
+                    ->middleware('abilities:mobile:sync');
+            });
+        });
     });
 });

@@ -9,6 +9,7 @@ use App\Models\CmsMedia;
 use App\Models\Course;
 use App\Models\Halaqa;
 use App\Models\Student;
+use App\Services\PublicContactService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Cache;
@@ -102,9 +103,9 @@ class PublicSiteController extends Controller
         return view('public.gallery', ['media' => CmsMedia::query()->where('is_gallery', true)->where('kind', 'image')->orderBy('sort_order')->latest()->paginate(18)]);
     }
 
-    public function contact(): View
+    public function contact(PublicContactService $publicContact): View
     {
-        return view('public.contact', ['center' => Center::query()->where('active', true)->first()]);
+        return view('public.contact', ['contact' => $publicContact->details()]);
     }
 
     public function sitemap(): Response

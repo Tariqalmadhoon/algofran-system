@@ -11,6 +11,7 @@ use App\Models\Branch;
 use App\Models\Center;
 use App\Models\DailyRecord;
 use App\Models\Halaqa;
+use App\Models\StaffProfile;
 use App\Models\Student;
 use App\Models\StudentAlert;
 use App\Models\TeacherProfile;
@@ -19,6 +20,7 @@ use App\Services\AcademicRecordsService;
 use App\Services\DashboardMetricsService;
 use App\Services\PrivateFileService;
 use App\Services\StudentAlertEngine;
+use App\Services\StudentPeriodRankingService;
 use App\Services\StudentProgressService;
 use Database\Seeders\AcademicSettingsSeeder;
 use Database\Seeders\QuranReferenceSeeder;
@@ -57,6 +59,7 @@ class PhaseThreeAcademicAnalyticsTest extends TestCase
         $this->record($student, $halaqa, $teacher, $manager, today()->toDateString(), 'late', [
             ['type' => 'recent_revision', 'start' => 1, 'end' => 7, 'evaluation' => 'good'],
         ]);
+        $this->record($student, $halaqa, $teacher, $manager, today()->subDays(3)->toDateString(), 'excused', []);
 
         $snapshot = app(StudentProgressService::class)->snapshot($student);
 
@@ -67,7 +70,7 @@ class PhaseThreeAcademicAnalyticsTest extends TestCase
         $this->assertSame(1, $snapshot->revision_sessions);
         $this->assertSame(1, $snapshot->metrics['monthly_revision_sessions']);
         $this->assertEqualsWithDelta(80, $snapshot->evaluation_average, 0.01);
-        $this->assertEqualsWithDelta(66.67, $snapshot->attendance_rate, 0.01);
+        $this->assertEqualsWithDelta(50, $snapshot->attendance_rate, 0.01);
         $this->assertGreaterThanOrEqual(0, $snapshot->score);
         $this->assertLessThanOrEqual(100, $snapshot->score);
         $this->assertArrayHasKey('weights', $snapshot->score_breakdown);
@@ -92,10 +95,10 @@ class PhaseThreeAcademicAnalyticsTest extends TestCase
         app(StudentAlertEngine::class)->evaluate($student->refresh(), $snapshot);
 
         $this->assertDatabaseHas('student_alerts', ['student_id' => $student->id, 'type' => 'consecutive_poor_evaluations', 'severity' => 'critical', 'status' => 'open']);
-        $this->assertDatabaseHas('student_alerts', ['student_id' => $student->id, 'type' => 'frequent_absence', 'status' => 'open']);
+        $this->assertDatabaseHas('student_alerts', ['student_id' => $student->id, 'type' => 'unexcused_absence', 'status' => 'open']);
         $this->assertDatabaseHas('student_alerts', ['student_id' => $student->id, 'type' => 'revision_delay', 'status' => 'open']);
 
-        $alert = StudentAlert::query()->where('type', 'frequent_absence')->firstOrFail();
+        $alert = StudentAlert::query()->where('type', 'unexcused_absence')->firstOrFail();
         app(StudentAlertEngine::class)->acknowledge($alert, $manager);
         $this->assertSame(AlertStatus::Acknowledged, $alert->refresh()->status);
         app(StudentAlertEngine::class)->resolve($alert, $manager, 'تم التواصل مع ولي الأمر ووضع خطة حضور.');
@@ -192,6 +195,101 @@ class PhaseThreeAcademicAnalyticsTest extends TestCase
             ->assertSee('لوحة المحفظ')
             ->assertSee($ownStudent->full_name)
             ->assertDontSee('D-OTHER');
+    }
+
+    public function test_period_ranking_merges_overlapping_memorization_and_counts_excused_as_absence(): void
+    {
+        $manager = User::factory()->create();
+        $manager->assignRole('center-manager');
+        [, , $halaqa, $teacher] = $this->organization($manager);
+        $memorizer = $this->student($manager, $halaqa, 'R-MEM');
+        $committed = $this->student($manager, $halaqa, 'R-COM');
+        $from = today()->subMonthNoOverflow()->startOfMonth();
+        $to = $from->copy()->endOfMonth();
+
+        $this->record($memorizer, $halaqa, $teacher, $manager, $from->copy()->addDay()->toDateString(), 'present', [
+            ['type' => 'new_memorization', 'start' => 1, 'end' => 10, 'evaluation' => 'excellent'],
+        ]);
+        $this->record($memorizer, $halaqa, $teacher, $manager, $from->copy()->addDays(2)->toDateString(), 'present', [
+            ['type' => 'new_memorization', 'start' => 5, 'end' => 15, 'evaluation' => 'very_good'],
+        ]);
+        $this->record($memorizer, $halaqa, $teacher, $manager, $from->copy()->addDays(3)->toDateString(), 'excused', []);
+
+        $this->record($committed, $halaqa, $teacher, $manager, $from->copy()->addDay()->toDateString(), 'present', [
+            ['type' => 'new_memorization', 'start' => 20, 'end' => 24, 'evaluation' => 'good'],
+        ]);
+        $this->record($committed, $halaqa, $teacher, $manager, $from->copy()->addDays(2)->toDateString(), 'present', []);
+        $this->record($committed, $halaqa, $teacher, $manager, $from->copy()->addDays(3)->toDateString(), 'late', []);
+
+        $analytics = app(StudentPeriodRankingService::class)->calculate(
+            collect([$memorizer, $committed]),
+            $from,
+            $to,
+        );
+
+        $this->assertSame($memorizer->id, $analytics['top_memorizer']['student']->id);
+        $this->assertSame(15, $analytics['top_memorizer']['memorized_ayahs']);
+        $this->assertSame($committed->id, $analytics['most_committed']['student']->id);
+        $this->assertEqualsWithDelta(100, $analytics['most_committed']['commitment_rate'], 0.01);
+
+        $memorizerRow = $analytics['rankings']->first(fn (array $row) => $row['student']->is($memorizer));
+        $this->assertNotNull($memorizerRow);
+        $this->assertSame(1, $memorizerRow['excused_days']);
+        $this->assertEqualsWithDelta(66.7, $memorizerRow['commitment_rate'], 0.01);
+        $this->assertSame(1, $memorizerRow['memorization_rank']);
+
+        $committedRow = $analytics['rankings']->first(fn (array $row) => $row['student']->is($committed));
+        $this->assertNotNull($committedRow);
+        $this->assertSame(1, $committedRow['commitment_rank']);
+    }
+
+    public function test_center_manager_dashboard_counts_and_rankings_never_leak_another_center(): void
+    {
+        $manager = User::factory()->create();
+        $manager->assignRole('center-manager');
+        [$center, $branch, $halaqa] = $this->organization($manager);
+        StaffProfile::query()->create([
+            'user_id' => $manager->id,
+            'center_id' => $center->id,
+            'branch_id' => $branch->id,
+            'employee_number' => 'CENTER-MANAGER-SCOPE',
+            'job_title' => 'مدير المركز',
+            'active' => true,
+        ]);
+        $ownStudent = $this->student($manager, $halaqa, 'CENTER-OWN');
+
+        $otherCenter = Center::query()->create(['name' => 'مركز آخر', 'code' => 'OTHER-CENTER-DASH']);
+        $otherBranch = Branch::query()->create(['center_id' => $otherCenter->id, 'name' => 'فرع آخر', 'code' => 'OTHER-BRANCH-DASH']);
+        $otherTeacherUser = User::factory()->create();
+        $otherTeacherUser->assignRole('teacher');
+        $otherTeacher = TeacherProfile::query()->create([
+            'user_id' => $otherTeacherUser->id,
+            'center_id' => $otherCenter->id,
+            'branch_id' => $otherBranch->id,
+            'employee_number' => 'OTHER-TEACHER-DASH',
+            'active' => true,
+        ]);
+        $otherHalaqa = Halaqa::query()->create([
+            'center_id' => $otherCenter->id,
+            'branch_id' => $otherBranch->id,
+            'primary_teacher_id' => $otherTeacher->id,
+            'name' => 'حلقة مركز آخر',
+            'code' => 'OTHER-HALAQA-DASH',
+            'capacity' => 20,
+            'active' => true,
+        ]);
+        $this->student($manager, $otherHalaqa, 'CENTER-OTHER');
+
+        $metrics = app(DashboardMetricsService::class)->for($manager->refresh(), [
+            'date_from' => today()->startOfMonth()->toDateString(),
+            'date_to' => today()->toDateString(),
+        ]);
+
+        $this->assertSame(1, $metrics['stats']['active_students']);
+        $this->assertSame(1, $metrics['stats']['teachers']);
+        $this->assertSame(1, $metrics['stats']['halaqas']);
+        $this->assertCount(1, $metrics['student_rankings']['rankings']);
+        $this->assertSame($ownStudent->id, $metrics['student_rankings']['rankings']->first()['student']->id);
     }
 
     /** @return array{Center, Branch, Halaqa, TeacherProfile} */

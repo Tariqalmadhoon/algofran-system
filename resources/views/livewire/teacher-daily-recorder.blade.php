@@ -1,12 +1,14 @@
 <div
     class="space-y-6 pb-24"
     x-on:daily-student-selected.window="$nextTick(() => document.getElementById('daily-session')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))"
+    x-on:daily-history-opened.window="$nextTick(() => document.getElementById('student-history')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))"
 >
     @php
         $enabledCount = collect($items)->where('enabled', true)->count();
         $completedRanges = collect($rangeSummaries)->where('complete', true)->where('valid', true)->count();
         $progressPercentage = $studentStats['total'] > 0 ? (int) round(($studentStats['recorded'] / $studentStats['total']) * 100) : 0;
         $attendanceLabel = collect($attendanceStatuses)->first(fn ($status) => $status->value === $attendanceStatus)?->label() ?? 'الحضور';
+        $isAbsence = in_array($attendanceStatus, ['absent', 'excused'], true);
         $typeDescriptions = [
             'new_memorization' => 'المقدار الجديد الذي حفظه الطالب اليوم',
             'recent_revision' => 'مراجعة المحفوظ القريب وتثبيته',
@@ -63,7 +65,7 @@
         @foreach([
             ['label' => 'الإعداد', 'hint' => 'التاريخ والحلقة', 'done' => $recordDate !== '' && $halaqaId !== ''],
             ['label' => 'الطالب', 'hint' => $selectedStudent?->full_name ?? 'اختر طالبًا', 'done' => $studentId !== ''],
-            ['label' => 'الجلسة', 'hint' => $studentId ? 'الحضور والتسميع' : 'تبدأ بعد اختيار الطالب', 'done' => $studentId !== '' && ($attendanceStatus === 'absent' || $completedRanges > 0)],
+            ['label' => 'الجلسة', 'hint' => $studentId ? 'الحضور والتسميع' : 'تبدأ بعد اختيار الطالب', 'done' => $studentId !== '' && ($isAbsence || $completedRanges > 0)],
         ] as $stepIndex => $step)
             <li class="flex items-center gap-3 rounded-2xl border px-4 py-3 transition {{ $step['done'] ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-white' }}">
                 <span class="grid size-9 shrink-0 place-items-center rounded-xl text-sm font-black {{ $step['done'] ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-500' }}">{{ $step['done'] ? '✓' : $stepIndex + 1 }}</span>
@@ -115,19 +117,30 @@
 
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" wire:loading.class="opacity-60" wire:target="recordDate,halaqaId,studentSearch,selectStudent">
             @forelse($students as $student)
-                <button
-                    @disabled($student->recorded_for_date)
-                    @if(!$student->recorded_for_date) wire:click="selectStudent({{ $student->id }})" @endif
-                    type="button"
-                    class="group relative overflow-hidden rounded-2xl border p-4 text-right transition duration-200 {{ (int) $studentId === $student->id ? 'border-emerald-600 bg-emerald-50 ring-2 ring-emerald-600/10' : ($student->recorded_for_date ? 'cursor-not-allowed border-slate-100 bg-slate-50/80 opacity-70' : 'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md') }}"
+                <article
+                    class="group relative overflow-hidden rounded-2xl border p-4 text-right transition duration-200 {{ (int) $studentId === $student->id ? 'border-emerald-600 bg-emerald-50 ring-2 ring-emerald-600/10' : ($student->recorded_for_date ? 'border-emerald-100 bg-emerald-50/35' : 'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md') }}"
                     wire:key="daily-student-{{ $student->id }}"
                 >
                     <span class="flex items-start gap-3">
                         <x-student-avatar :student="$student" size="sm" :badge="$student->recorded_for_date ? '✓' : null" @class(['opacity-75' => $student->recorded_for_date]) />
                         <span class="min-w-0"><span class="block truncate font-black text-emerald-950">{{ $student->full_name }}</span><span class="mt-1 block text-xs text-slate-500" dir="ltr">{{ $student->student_number }}</span></span>
                     </span>
-                    <span class="mt-3 block border-t border-slate-100 pt-2 text-xs font-bold {{ $student->recorded_for_date ? 'text-emerald-700' : 'text-amber-600' }}">{{ $student->recorded_for_date ? 'مكتمل لهذا التاريخ' : 'اضغط لبدء التسجيل' }}</span>
-                </button>
+                    <span class="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-2 text-[11px] text-slate-500">
+                        <span>السجلات السابقة: {{ $student->daily_records_count }}</span>
+                        <span dir="ltr">{{ $student->daily_records_max_record_date ? substr($student->daily_records_max_record_date, 0, 10) : '—' }}</span>
+                    </span>
+                    <span class="mt-3 grid grid-cols-2 gap-2">
+                        @if($student->recorded_for_date)
+                            <span class="inline-flex min-h-10 items-center justify-center rounded-xl bg-emerald-100 px-2 text-xs font-black text-emerald-800">تم تسجيل اليوم</span>
+                        @else
+                            <button wire:click="selectStudent({{ $student->id }})" type="button" class="inline-flex min-h-10 items-center justify-center rounded-xl bg-emerald-700 px-2 text-xs font-black text-white transition hover:bg-emerald-800">تسجيل اليوم</button>
+                        @endif
+                        <button wire:click="showStudentHistory({{ $student->id }})" type="button" class="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 text-xs font-black text-slate-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800">
+                            <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>
+                            الكشف السابق
+                        </button>
+                    </span>
+                </article>
             @empty
                 <div class="col-span-full py-10 text-center">
                     <span class="mx-auto grid size-12 place-items-center rounded-2xl bg-slate-100 text-xl">⌕</span>
@@ -137,7 +150,171 @@
             @endforelse
         </div>
         <x-input-error :messages="$errors->get('studentId')" />
+        <x-input-error :messages="$errors->get('historyStudentId')" />
     </section>
+
+    @if($historyStudent)
+        <section
+            id="student-history"
+            class="panel scroll-mt-24 overflow-hidden !p-0"
+            wire:key="student-history-{{ $historyStudent->id }}"
+            x-data="{ visible: false }"
+            x-init="$nextTick(() => visible = true)"
+            x-show="visible"
+            x-transition:enter="transition ease-out duration-300"
+            x-transition:enter-start="translate-y-3 opacity-0"
+            x-transition:enter-end="translate-y-0 opacity-100"
+        >
+            <div class="relative overflow-hidden bg-[linear-gradient(135deg,#ecfdf5_0%,#ffffff_55%,#f0fdfa_100%)] p-5 sm:p-6">
+                <span class="pointer-events-none absolute -left-12 -top-16 size-44 rounded-full bg-emerald-200/25 blur-2xl"></span>
+                <div class="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <x-student-avatar :student="$historyStudent" />
+                        <div class="min-w-0">
+                            <p class="text-xs font-black text-emerald-700">الكشف السابق للطالب</p>
+                            <h2 class="truncate text-xl font-black text-emerald-950">{{ $historyStudent->full_name }}</h2>
+                            <p class="mt-1 text-xs text-slate-500"><span dir="ltr">{{ $historyStudent->student_number }}</span> · مرتب من الأحدث إلى الأقدم</p>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        @can('view', $historyStudent)
+                            <a href="{{ route('students.show', $historyStudent) }}" class="btn-secondary text-xs">فتح ملف الطالب الكامل</a>
+                        @endcan
+                        <button wire:click="closeStudentHistory" type="button" class="btn-ghost text-xs font-black text-slate-500">إغلاق الكشف</button>
+                    </div>
+                </div>
+
+                <div class="relative mt-5 grid gap-3 sm:grid-cols-3">
+                    <div class="rounded-2xl border border-white bg-white/80 p-3 shadow-sm">
+                        <p class="text-[11px] font-bold text-slate-500">إجمالي الجلسات</p>
+                        <p class="mt-1 text-2xl font-black text-emerald-900">{{ $historySummary['total'] }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-white bg-white/80 p-3 shadow-sm">
+                        <p class="text-[11px] font-bold text-slate-500">نتائج التصفية</p>
+                        <p class="mt-1 text-2xl font-black text-emerald-900">{{ $historySummary['filtered'] }}</p>
+                    </div>
+                    <div class="rounded-2xl border border-white bg-white/80 p-3 shadow-sm">
+                        <p class="text-[11px] font-bold text-slate-500">آخر جلسة مسجلة</p>
+                        <p class="mt-2 text-sm font-black text-emerald-900" dir="ltr">{{ $historySummary['last_date'] ? substr($historySummary['last_date'], 0, 10) : 'لا توجد' }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="border-y border-slate-100 bg-white px-5 py-3 sm:px-6">
+                <div class="flex flex-wrap gap-2" aria-label="تصفية الكشف السابق">
+                    @foreach([
+                        'all' => ['الكل', 'كل الحضور والتسميع'],
+                        'memorization' => ['الحفظ الجديد', 'جلسات الحفظ فقط'],
+                        'revision' => ['المراجعة', 'القريبة والقديمة'],
+                    ] as $filterValue => $filterMeta)
+                        <button
+                            wire:click="setHistoryFilter('{{ $filterValue }}')"
+                            type="button"
+                            class="rounded-xl border px-3 py-2 text-right transition {{ $historyFilter === $filterValue ? 'border-emerald-600 bg-emerald-700 text-white shadow-md shadow-emerald-900/10' : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:bg-emerald-50' }}"
+                        >
+                            <strong class="block text-xs">{{ $filterMeta[0] }}</strong>
+                            <span class="mt-0.5 block text-[10px] opacity-70">{{ $filterMeta[1] }}</span>
+                        </button>
+                    @endforeach
+                </div>
+            </div>
+
+            <div class="space-y-4 p-5 sm:p-6" wire:loading.class="opacity-50" wire:target="setHistoryFilter,loadMoreHistory">
+                @forelse($historyRecords as $record)
+                    @php
+                        $attendanceValue = $record->attendance?->status?->value;
+                        $attendanceStyle = match($attendanceValue) {
+                            'present' => 'bg-emerald-50 text-emerald-700 ring-emerald-600/10',
+                            'late' => 'bg-amber-50 text-amber-700 ring-amber-600/10',
+                            'excused' => 'bg-sky-50 text-sky-700 ring-sky-600/10',
+                            default => 'bg-rose-50 text-rose-700 ring-rose-600/10',
+                        };
+                        $evaluationStyle = match($record->general_evaluation?->value) {
+                            'excellent' => 'bg-emerald-100 text-emerald-800',
+                            'very_good' => 'bg-teal-100 text-teal-800',
+                            'good' => 'bg-amber-100 text-amber-800',
+                            default => 'bg-rose-100 text-rose-800',
+                        };
+                    @endphp
+                    <article class="overflow-hidden rounded-3xl border border-slate-200 bg-white transition duration-200 hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-950/5" wire:key="student-history-record-{{ $record->id }}">
+                        <div class="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/70 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <time class="font-black text-emerald-950" datetime="{{ $record->record_date->toDateString() }}">{{ $record->record_date->translatedFormat('l، j F Y') }}</time>
+                                <p class="mt-1 text-[11px] text-slate-500">{{ $record->halaqa?->name ?? 'حلقة غير محددة' }} · {{ $record->teacher?->user?->name ?? 'محفّظ غير محدد' }}</p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="rounded-full px-3 py-1 text-xs font-black ring-1 {{ $attendanceStyle }}">{{ $record->attendance?->status?->label() ?? 'دون حضور' }}</span>
+                                @if($record->general_evaluation)
+                                    <span class="rounded-full px-3 py-1 text-xs font-black {{ $evaluationStyle }}">التقييم العام: {{ $record->general_evaluation->label() }}</span>
+                                @endif
+                            </div>
+                        </div>
+
+                        <div class="space-y-3 p-4">
+                            @forelse($record->recitationItems as $item)
+                                @php
+                                    $startSurahName = $item->startAyah?->surah?->name_arabic;
+                                    $endSurahName = $item->endAyah?->surah?->name_arabic;
+                                    $errorCount = $item->memorization_errors + $item->tajweed_errors;
+                                @endphp
+                                <div class="grid gap-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-3 lg:grid-cols-[9rem_minmax(0,1fr)_auto] lg:items-center">
+                                    <div class="flex items-center gap-2">
+                                        <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-100 text-emerald-800">
+                                            <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"/></svg>
+                                        </span>
+                                        <strong class="text-sm text-emerald-950">{{ $item->type->label() }}</strong>
+                                    </div>
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-bold leading-6 text-slate-700">
+                                            @if($startSurahName && $endSurahName)
+                                                من {{ $startSurahName }} آية {{ $item->startAyah->ayah_number }} إلى {{ $endSurahName }} آية {{ $item->endAyah->ayah_number }}
+                                            @else
+                                                نطاق التسميع غير متاح
+                                            @endif
+                                        </p>
+                                        @if($item->notes)<p class="mt-1 text-xs leading-5 text-slate-500">{{ $item->notes }}</p>@endif
+                                    </div>
+                                    <div class="flex flex-wrap gap-2 text-[11px] font-bold lg:justify-end">
+                                        <span class="rounded-lg bg-white px-2.5 py-1.5 text-emerald-700 shadow-sm">{{ $item->evaluation->label() }}</span>
+                                        <span class="rounded-lg bg-white px-2.5 py-1.5 text-slate-600 shadow-sm">{{ $errorCount }} {{ $errorCount === 1 ? 'خطأ' : 'أخطاء' }}</span>
+                                        @if($item->hesitation_count || $item->teacher_prompt_count)
+                                            <span class="rounded-lg bg-white px-2.5 py-1.5 text-slate-600 shadow-sm">تردد {{ $item->hesitation_count }} · تلقين {{ $item->teacher_prompt_count }}</span>
+                                        @endif
+                                    </div>
+                                </div>
+                            @empty
+                                <div class="rounded-2xl bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">سُجل الحضور دون بنود تسميع.</div>
+                            @endforelse
+
+                            @if($record->attendance?->notes || $record->notes)
+                                <div class="rounded-2xl border border-amber-100 bg-amber-50/60 px-4 py-3 text-xs leading-6 text-amber-950">
+                                    @if($record->attendance?->notes)<p><strong>ملاحظة الحضور:</strong> {{ $record->attendance->notes }}</p>@endif
+                                    @if($record->notes)<p><strong>ملاحظة الجلسة:</strong> {{ $record->notes }}</p>@endif
+                                </div>
+                            @endif
+                        </div>
+                    </article>
+                @empty
+                    <div class="rounded-3xl border border-dashed border-slate-200 bg-slate-50/60 py-10 text-center">
+                        <span class="mx-auto grid size-12 place-items-center rounded-2xl bg-white text-slate-400 shadow-sm">
+                            <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"/></svg>
+                        </span>
+                        <p class="mt-3 font-black text-slate-700">لا توجد سجلات ضمن هذا التصنيف</p>
+                        <p class="mt-1 text-xs text-slate-400">ستظهر الجلسات هنا فور حفظها واعتمادها.</p>
+                    </div>
+                @endforelse
+
+                @if($historySummary['filtered'] > $historyRecords->count() && $historyRecords->count() < 30)
+                    <button wire:click="loadMoreHistory" wire:loading.attr="disabled" wire:target="loadMoreHistory" type="button" class="btn-secondary mx-auto flex min-w-48 justify-center">
+                        <span wire:loading.remove wire:target="loadMoreHistory">عرض 5 سجلات أقدم</span>
+                        <span wire:loading wire:target="loadMoreHistory">جارٍ التحميل…</span>
+                    </button>
+                @elseif($historySummary['filtered'] > $historyRecords->count())
+                    <p class="text-center text-xs text-slate-400">يعرض الكشف السريع أحدث 30 جلسة. افتح ملف الطالب الكامل لبقية التاريخ.</p>
+                @endif
+            </div>
+        </section>
+    @endif
 
     @if($studentId && $selectedStudent)
         <form id="daily-session" wire:submit="save" class="scroll-mt-24 space-y-6">
@@ -147,7 +324,13 @@
                         <x-student-avatar :student="$selectedStudent" />
                         <div><p class="text-xs font-bold text-emerald-700">تسجّل الآن للطالب</p><h2 class="text-lg font-black text-emerald-950">{{ $selectedStudent->full_name }}</h2><p class="text-xs text-slate-500" dir="ltr">{{ $selectedStudent->student_number }}</p></div>
                     </div>
-                    <button wire:click="clearSelectedStudent" type="button" class="btn-secondary">تغيير الطالب</button>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button wire:click="showStudentHistory({{ $selectedStudent->id }})" type="button" class="btn-secondary inline-flex items-center gap-2">
+                            <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>
+                            الكشف السابق
+                        </button>
+                        <button wire:click="clearSelectedStudent" type="button" class="btn-ghost font-black text-slate-600">تغيير الطالب</button>
+                    </div>
                 </div>
 
                 <div class="space-y-5 p-5 sm:p-6">
@@ -170,13 +353,17 @@
                     </div>
                     <x-input-error :messages="$errors->get('attendanceStatus')" />
                     <div class="grid gap-4 lg:grid-cols-2">
-                        <label><span class="form-label">التقييم العام <span class="font-normal text-slate-400">(اختياري)</span></span><select wire:model="generalEvaluation" class="form-input"><option value="">دون تقييم عام</option>@foreach($evaluations as $evaluation)<option value="{{ $evaluation->value }}">{{ $evaluation->label() }}</option>@endforeach</select><x-input-error :messages="$errors->get('generalEvaluation')" /></label>
+                        @if(! $isAbsence)
+                            <label><span class="form-label">التقييم العام <span class="font-normal text-slate-400">(اختياري)</span></span><select wire:model="generalEvaluation" class="form-input"><option value="">دون تقييم عام</option>@foreach($evaluations as $evaluation)<option value="{{ $evaluation->value }}">{{ $evaluation->label() }}</option>@endforeach</select><x-input-error :messages="$errors->get('generalEvaluation')" /></label>
+                        @else
+                            <div class="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-bold text-sky-800">لا يوجد تقييم أكاديمي للطالب الغائب.</div>
+                        @endif
                         <label><span class="form-label">ملاحظة الحضور <span class="font-normal text-slate-400">(اختياري)</span></span><input wire:model="attendanceNotes" class="form-input" placeholder="مثال: حضر متأخرًا عشر دقائق"><x-input-error :messages="$errors->get('attendanceNotes')" /></label>
                     </div>
                 </div>
             </section>
 
-            @if($attendanceStatus !== 'absent')
+            @if(! $isAbsence)
                 <section class="space-y-4">
                     <div class="panel">
                         <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -274,10 +461,10 @@
                     @endforeach
                 </section>
             @else
-                <section class="rounded-3xl border border-red-200 bg-red-50 p-6 text-center">
-                    <span class="mx-auto grid size-12 place-items-center rounded-2xl bg-white text-2xl font-black text-red-500 shadow-sm">×</span>
-                    <h2 class="mt-3 text-lg font-black text-red-900">الطالب مسجّل غائبًا</h2>
-                    <p class="mt-1 text-sm text-red-700">أُغلقت بنود التسميع تلقائيًا. أضف ملاحظة إن لزم ثم احفظ الحضور.</p>
+                <section @class(['rounded-3xl border p-6 text-center', 'border-sky-200 bg-sky-50' => $attendanceStatus === 'excused', 'border-red-200 bg-red-50' => $attendanceStatus === 'absent'])>
+                    <span @class(['mx-auto grid size-12 place-items-center rounded-2xl bg-white text-2xl font-black shadow-sm', 'text-sky-600' => $attendanceStatus === 'excused', 'text-red-500' => $attendanceStatus === 'absent'])>{{ $attendanceStatus === 'excused' ? '!' : '×' }}</span>
+                    <h2 @class(['mt-3 text-lg font-black', 'text-sky-900' => $attendanceStatus === 'excused', 'text-red-900' => $attendanceStatus === 'absent'])>{{ $attendanceStatus === 'excused' ? 'الطالب غائب بعذر' : 'الطالب مسجّل غائبًا' }}</h2>
+                    <p @class(['mt-1 text-sm', 'text-sky-700' => $attendanceStatus === 'excused', 'text-red-700' => $attendanceStatus === 'absent'])>سيُحفظ الغياب دون أي تسميع أو تقييم. أضف ملاحظة إن لزم ثم احفظ الحضور.</p>
                 </section>
             @endif
 
@@ -287,7 +474,7 @@
 
             <div class="sticky bottom-4 z-30 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-[0_16px_45px_-18px_rgba(15,23,42,.4)] backdrop-blur">
                 <div class="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div class="min-w-0"><p class="truncate text-sm font-black text-emerald-950">{{ $selectedStudent->full_name }} · {{ $attendanceLabel }}</p><p class="text-xs text-slate-500">{{ $attendanceStatus === 'absent' ? 'سيُحفظ الحضور دون تسميع' : $enabledCount.' بنود مفعّلة · '.$completedRanges.' نطاقات مكتملة' }}</p></div>
+                    <div class="min-w-0"><p class="truncate text-sm font-black text-emerald-950">{{ $selectedStudent->full_name }} · {{ $attendanceLabel }}</p><p class="text-xs text-slate-500">{{ $isAbsence ? 'سيُحفظ الحضور دون تسميع أو تقييم' : $enabledCount.' بنود مفعّلة · '.$completedRanges.' نطاقات مكتملة' }}</p></div>
                     <button class="btn-primary min-w-44" wire:loading.attr="disabled" type="submit"><span wire:loading.remove wire:target="save">تأكيد وحفظ السجل</span><span wire:loading wire:target="save">جارٍ التحقق والحفظ…</span></button>
                 </div>
             </div>

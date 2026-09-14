@@ -48,4 +48,10 @@ class StudentPolicy
     {
         return $user->can('students.archive') && ! $user->requiresTeacherAssignmentScope();
     }
+
+    public function archive(User $user, Student $student): bool
+    {
+        return $user->can('students.archive')
+            && app(StudentVisibilityService::class)->canView($user, $student);
+    }
 }

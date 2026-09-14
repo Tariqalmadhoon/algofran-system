@@ -11,6 +11,7 @@
         @case('alerts') <path d="M10.3 2.9 1.8 17a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 2.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4m0 4h.01"/> @break
         @case('calendar') <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/> @break
         @case('reports') <path d="M4 19V9m5 10V5m5 14v-7m5 7V3"/> @break
+        @case('mobile') <rect x="6" y="2.5" width="12" height="19" rx="2"/><path d="M10 5h4M11.5 18.5h1"/><path d="m19 8 2 2-2 2"/> @break
         @case('bell') <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/> @break
         @case('profile') <circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/> @break
         @case('logout') <path d="M10 17l5-5-5-5m5 5H3"/><path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"/> @break

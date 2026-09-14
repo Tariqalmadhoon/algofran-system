@@ -1,0 +1,275 @@
+name: Production quality and deployment
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      deploy_to_production:
+        description: Deploy this tested commit of the configured production branch
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    name: Test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          # Feature tests create fake avatar, student, and CMS images; Laravel
+          # requires GD to generate those image fixtures on the Ubuntu runner.
+          extensions: mbstring, dom, fileinfo, gd, pdo_sqlite, pdo_mysql
+          coverage: none
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Validate Composer files
+        run: composer validate --no-check-publish
+
+      - name: Install PHP dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Install frontend dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build production assets
+        # Feature tests render Blade layouts. A clean CI checkout must have the
+        # Vite manifest before those views are exercised.
+        # Shared hosting uses polling; no Reverb credentials enter this artifact.
+        run: VITE_REVERB_APP_KEY= npm run build
+
+      - name: Run application tests
+        run: php artisan test
+
+      - name: Package frontend assets for hosts without Node.js
+        run: tar -cf web-assets.tar -C public build
+
+      - name: Save the tested assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-assets-${{ github.sha }}
+          path: web-assets.tar
+          retention-days: 7
+
+  deploy:
+    name: Deploy tested commit to Hostinger
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    concurrency:
+      group: hostinger-production-deployment
+      cancel-in-progress: false
+    if: >-
+      github.ref_type == 'branch' &&
+      github.ref_name == vars.PRODUCTION_BRANCH &&
+      ((github.event_name == 'workflow_dispatch' && inputs.deploy_to_production == true) ||
+      (github.event_name == 'push' && vars.AUTO_DEPLOY_PRODUCTION == 'true' && github.ref_name == vars.PRODUCTION_BRANCH))
+
+    steps:
+      - name: Verify deployment configuration
+        id: deployment_config
+        env:
+          SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
+          SSH_USER: ${{ secrets.PRODUCTION_SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}
+          PROJECT_PATH: ${{ secrets.PRODUCTION_PROJECT_PATH }}
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+          HOSTING_PROFILE: ${{ vars.PRODUCTION_HOSTING_PROFILE }}
+          PUBLIC_PATH: ${{ secrets.PRODUCTION_PUBLIC_PATH }}
+        shell: bash
+        run: |
+          missing=()
+
+          [[ -n "$SSH_HOST" ]] || missing+=(PRODUCTION_SSH_HOST)
+          [[ -n "$SSH_USER" ]] || missing+=(PRODUCTION_SSH_USER)
+          [[ -n "$SSH_PRIVATE_KEY" ]] || missing+=(PRODUCTION_SSH_PRIVATE_KEY)
+          [[ -n "$SSH_KNOWN_HOSTS" ]] || missing+=(PRODUCTION_SSH_KNOWN_HOSTS)
+          [[ -n "$PROJECT_PATH" ]] || missing+=(PRODUCTION_PROJECT_PATH)
+          [[ "$PRODUCTION_URL" == https://* ]] || missing+=(PRODUCTION_URL)
+          [[ "$HOSTING_PROFILE" == vps || "$HOSTING_PROFILE" == shared ]] || missing+=(PRODUCTION_HOSTING_PROFILE)
+          if [[ "$HOSTING_PROFILE" == shared ]]; then
+            [[ -n "$PUBLIC_PATH" ]] || missing+=(PRODUCTION_PUBLIC_PATH)
+          fi
+
+          if (( ${#missing[@]} > 0 )); then
+            echo "### Deployment configuration incomplete" >> "$GITHUB_STEP_SUMMARY"
+            echo "Configure the production environment values: ${missing[*]}." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Configure verified SSH access
+        if: steps.deployment_config.outputs.ready == 'true'
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$HOME/.ssh/production_key"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/production_key" "$HOME/.ssh/known_hosts"
+
+      - name: Retrieve assets from this quality run
+        if: vars.PRODUCTION_HOSTING_PROFILE == 'shared'
+        uses: actions/download-artifact@v4
+        with:
+          name: web-assets-${{ github.sha }}
+          path: deployment-assets
+
+      - name: Transfer shared-hosting frontend assets
+        if: vars.PRODUCTION_HOSTING_PROFILE == 'shared'
+        env:
+          SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
+          SSH_USER: ${{ secrets.PRODUCTION_SSH_USER }}
+          SSH_PORT: ${{ secrets.PRODUCTION_SSH_PORT }}
+        shell: bash
+        run: |
+          ssh_port="${SSH_PORT:-22}"
+          temp_dir="$(ssh -i "$HOME/.ssh/production_key" -p "$ssh_port" -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$SSH_USER@$SSH_HOST" 'mktemp -d /tmp/gofran-deploy.XXXXXXXXXX')"
+          [[ "$temp_dir" =~ ^/tmp/gofran-deploy\.[A-Za-z0-9]+$ ]] || exit 1
+          echo "REMOTE_ASSET_DIR=$temp_dir" >> "$GITHUB_ENV"
+          scp -i "$HOME/.ssh/production_key" -P "$ssh_port" -o BatchMode=yes -o IdentitiesOnly=yes \
+            deployment-assets/web-assets.tar "$SSH_USER@$SSH_HOST:$temp_dir/web-assets.tar"
+
+      - name: Lock the server, deploy the exact tested commit, and run preflight
+        if: steps.deployment_config.outputs.ready == 'true'
+        env:
+          SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
+          SSH_USER: ${{ secrets.PRODUCTION_SSH_USER }}
+          SSH_PORT: ${{ secrets.PRODUCTION_SSH_PORT }}
+          PROJECT_PATH: ${{ secrets.PRODUCTION_PROJECT_PATH }}
+          DEPLOY_BRANCH: ${{ github.ref_name }}
+          DEPLOY_SHA: ${{ github.sha }}
+          HOSTING_PROFILE: ${{ vars.PRODUCTION_HOSTING_PROFILE }}
+          PUBLIC_PATH: ${{ secrets.PRODUCTION_PUBLIC_PATH }}
+        shell: bash
+        run: |
+          ssh_port="${SSH_PORT:-22}"
+          project_path_b64="$(printf '%s' "$PROJECT_PATH" | base64 -w 0)"
+          deploy_branch_b64="$(printf '%s' "$DEPLOY_BRANCH" | base64 -w 0)"
+          public_path_b64="$(printf '%s' "$PUBLIC_PATH" | base64 -w 0)"
+
+          ssh -i "$HOME/.ssh/production_key" -p "$ssh_port" \
+            -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$SSH_USER@$SSH_HOST" \
+            "bash -s -- '$project_path_b64' '$deploy_branch_b64' '$DEPLOY_SHA' '$HOSTING_PROFILE' '$public_path_b64' '${REMOTE_ASSET_DIR:-}'" <<'REMOTE'
+          set -euo pipefail
+
+          project_path="$(printf '%s' "$1" | base64 -d)"
+          deploy_branch="$(printf '%s' "$2" | base64 -d)"
+          deploy_sha="$3"
+          hosting_profile="$4"
+          public_path="$(printf '%s' "$5" | base64 -d)"
+          asset_dir="$6"
+
+          [[ "$project_path" == /* && "$project_path" != "/" ]] || {
+            echo "The configured project path must be an absolute, non-root path." >&2
+            exit 1
+          }
+          [[ "$deploy_branch" =~ ^[A-Za-z0-9._/-]+$ ]] || {
+            echo "The selected branch name is not safe for deployment." >&2
+            exit 1
+          }
+          [[ "$deploy_sha" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          [[ "$hosting_profile" == vps || "$hosting_profile" == shared ]] || exit 1
+          if [[ "$hosting_profile" == shared ]]; then
+            [[ "$asset_dir" =~ ^/tmp/gofran-deploy\.[A-Za-z0-9]+$ && -f "$asset_dir/web-assets.tar" ]] || exit 1
+          fi
+
+          cd -- "$project_path"
+          project_path="$(pwd -P)"
+          [[ -d .git && -f artisan && -f vendor/autoload.php && -f .env ]] || {
+            echo "The production directory is not a prepared Laravel checkout." >&2
+            exit 1
+          }
+
+          # All deployment mutations, including git and dependency updates, share
+          # this lock with manual deployments and the shared-hosting cron jobs.
+          command -v flock >/dev/null 2>&1 || exit 1
+          exec 9>"$project_path/storage/framework/deploy.lock"
+          flock -n 9 || { echo "Another deployment or cron job is active; retry later." >&2; exit 1; }
+          export GOFRAN_DEPLOY_LOCK_HELD=1
+
+          current_branch="$(git branch --show-current)"
+          [[ "$current_branch" == "$deploy_branch" ]] || {
+            echo "Production is on '$current_branch', but this workflow selected '$deploy_branch'." >&2
+            exit 1
+          }
+
+          git diff --quiet && git diff --cached --quiet || {
+            echo "Tracked production files contain local changes; deployment was stopped." >&2
+            exit 1
+          }
+
+          git fetch --prune origin "$deploy_branch"
+          git cat-file -e "$deploy_sha^{commit}"
+          git merge-base --is-ancestor "$deploy_sha" FETCH_HEAD || {
+            echo "The tested commit is no longer on the production branch." >&2; exit 1;
+          }
+          git merge-base --is-ancestor HEAD "$deploy_sha" || {
+            echo "This deployment would roll back or diverge from production." >&2; exit 1;
+          }
+          trap 'echo "Deployment failed; maintenance stays enabled if it was entered. Review the release before artisan up." >&2' ERR
+          php artisan down --retry=60 --refresh=15
+          git merge --ff-only "$deploy_sha"
+          [[ "$(git rev-parse HEAD)" == "$deploy_sha" ]] || exit 1
+          if [[ "$hosting_profile" == shared ]]; then
+            bash deploy/deploy-shared.sh "$project_path" "$public_path" "$asset_dir/web-assets.tar"
+          else
+            bash deploy/deploy.sh "$project_path"
+          fi
+          REMOTE
+
+      - name: Verify public readiness endpoints
+        if: steps.deployment_config.outputs.ready == 'true'
+        env:
+          PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+        shell: bash
+        run: |
+          base_url="${PRODUCTION_URL%/}"
+          curl --fail --silent --show-error --location --retry 4 --retry-all-errors \
+            --connect-timeout 10 --max-time 30 "$base_url/up" > /dev/null
+          curl --fail --silent --show-error --location --retry 4 --retry-all-errors \
+            --connect-timeout 10 --max-time 30 "$base_url/ready" > /dev/null
+
+          echo "### Production deployment completed" >> "$GITHUB_STEP_SUMMARY"
+          echo "Branch: \`$GITHUB_REF_NAME\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit: \`$GITHUB_SHA\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Readiness checks: passed." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove transferred temporary assets
+        if: always() && env.REMOTE_ASSET_DIR != ''
+        env:
+          SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
+          SSH_USER: ${{ secrets.PRODUCTION_SSH_USER }}
+          SSH_PORT: ${{ secrets.PRODUCTION_SSH_PORT }}
+        shell: bash
+        run: |
+          [[ "$REMOTE_ASSET_DIR" =~ ^/tmp/gofran-deploy\.[A-Za-z0-9]+$ ]] || exit 1
+          ssh -i "$HOME/.ssh/production_key" -p "${SSH_PORT:-22}" -o BatchMode=yes -o IdentitiesOnly=yes \
+            "$SSH_USER@$SSH_HOST" "rm -f -- '$REMOTE_ASSET_DIR/web-assets.tar' && rmdir -- '$REMOTE_ASSET_DIR'"

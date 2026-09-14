@@ -1,7 +1,8 @@
 <?php
 
 return [
-    'default' => env('BROADCAST_CONNECTION', 'log'),
+    // Laravel converts the literal env value "null" to PHP null.
+    'default' => env('BROADCAST_CONNECTION', 'log') ?? 'null',
 
     'connections' => [
         'reverb' => [

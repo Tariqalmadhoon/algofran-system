@@ -34,6 +34,12 @@ class TeacherDailyRecorder extends Component
 
     public string $studentSearch = '';
 
+    public string $historyStudentId = '';
+
+    public string $historyFilter = 'all';
+
+    public int $historyLimit = 5;
+
     public string $attendanceStatus = 'present';
 
     public string $attendanceNotes = '';
@@ -74,6 +80,7 @@ class TeacherDailyRecorder extends Component
         }
 
         $this->studentSearch = '';
+        $this->closeStudentHistory();
         $this->resetRecorder();
         $this->resetValidation();
     }
@@ -81,6 +88,7 @@ class TeacherDailyRecorder extends Component
     public function updatedHalaqaId(): void
     {
         $this->studentSearch = '';
+        $this->closeStudentHistory();
         $this->resetRecorder();
         $this->resetValidation();
     }
@@ -98,10 +106,12 @@ class TeacherDailyRecorder extends Component
     {
         $this->resetValidation(['attendanceStatus', 'items']);
 
-        if ($status === AttendanceStatus::Absent->value) {
+        $attendanceStatus = AttendanceStatus::tryFrom($status);
+        if ($attendanceStatus?->isAbsence()) {
             foreach ($this->items as $index => $item) {
                 $this->items[$index]['enabled'] = false;
             }
+            $this->generalEvaluation = '';
 
             return;
         }
@@ -162,15 +172,7 @@ class TeacherDailyRecorder extends Component
             return;
         }
 
-        $student = Student::query()
-            ->whereKey($studentId)
-            ->where('status', 'active')
-            ->whereHas('enrollments', function ($enrollments) {
-                $enrollments->where('halaqa_id', $this->halaqaId)
-                    ->whereDate('starts_at', '<=', $this->recordDate)
-                    ->where(fn ($dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', $this->recordDate));
-            })
-            ->first();
+        $student = $this->studentInSelectedHalaqa($studentId);
 
         if (! $student) {
             $this->addError('studentId', 'الطالب غير متاح في هذه الحلقة في التاريخ المحدد.');
@@ -196,14 +198,62 @@ class TeacherDailyRecorder extends Component
         $this->resetValidation();
     }
 
+    public function showStudentHistory(int $studentId): void
+    {
+        Gate::authorize('recitations.view');
+
+        $student = $this->studentInSelectedHalaqa($studentId);
+        if (! $student) {
+            $this->historyStudentId = '';
+            $this->addError('historyStudentId', 'لا يمكن عرض سجل طالب خارج الحلقة المسندة إليك.');
+
+            return;
+        }
+
+        $this->historyStudentId = (string) $student->id;
+        $this->historyFilter = 'all';
+        $this->historyLimit = 5;
+        $this->resetValidation('historyStudentId');
+        $this->dispatch('daily-history-opened');
+    }
+
+    public function closeStudentHistory(): void
+    {
+        $this->historyStudentId = '';
+        $this->historyFilter = 'all';
+        $this->historyLimit = 5;
+        $this->resetValidation('historyStudentId');
+    }
+
+    public function setHistoryFilter(string $filter): void
+    {
+        if (! in_array($filter, ['all', 'memorization', 'revision'], true)) {
+            return;
+        }
+
+        $this->historyFilter = $filter;
+        $this->historyLimit = 5;
+    }
+
+    public function loadMoreHistory(): void
+    {
+        if ($this->historyStudentId === '' || ! $this->studentInSelectedHalaqa((int) $this->historyStudentId)) {
+            $this->closeStudentHistory();
+
+            return;
+        }
+
+        $this->historyLimit = min(30, max(5, $this->historyLimit) + 5);
+    }
+
     public function toggleItem(int $index): void
     {
         if (! isset($this->items[$index])) {
             return;
         }
 
-        if ($this->attendanceStatus === AttendanceStatus::Absent->value) {
-            $this->addError('items', 'لا يمكن إضافة تسميع لطالب غائب.');
+        if (AttendanceStatus::tryFrom($this->attendanceStatus)?->isAbsence()) {
+            $this->addError('items', 'لا يمكن إضافة تسميع للطالب الغائب، سواء كان الغياب بعذر أو دون عذر.');
 
             return;
         }
@@ -321,6 +371,18 @@ class TeacherDailyRecorder extends Component
         $student = Student::query()->findOrFail($data['studentId']);
         Gate::authorize('create', [DailyRecord::class, $halaqa, $data['recordDate']]);
 
+        $attendanceStatus = AttendanceStatus::from($data['attendanceStatus']);
+        if ($attendanceStatus->isAbsence()) {
+            $data['generalEvaluation'] = '';
+            foreach ($data['items'] as $index => $item) {
+                if (! empty($item['enabled'])) {
+                    throw ValidationException::withMessages([
+                        "items.{$index}.enabled" => 'لا يمكن تسجيل بنود تسميع لطالب غائب.',
+                    ]);
+                }
+            }
+        }
+
         $items = [];
         foreach ($data['items'] as $index => $item) {
             if (! $item['enabled']) {
@@ -412,17 +474,21 @@ class TeacherDailyRecorder extends Component
     public function render(): View
     {
         $halaqas = $this->assignedHalaqas();
+        $hasAssignedHalaqa = $halaqas->contains('id', (int) $this->halaqaId);
         $allStudents = Student::query()
-            ->when($this->halaqaId, fn ($query) => $query->whereHas('enrollments', function ($enrollments) {
+            ->when($hasAssignedHalaqa, fn ($query) => $query->whereHas('enrollments', function ($enrollments) {
                 $enrollments->where('halaqa_id', $this->halaqaId)
                     ->whereDate('starts_at', '<=', $this->recordDate)
                     ->where(fn ($dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', $this->recordDate));
             }), fn ($query) => $query->whereRaw('1 = 0'))
+            ->select(['id', 'student_number', 'full_name', 'first_name', 'family_name', 'photo_private_file_id'])
             ->with('photo:id')
             ->withExists(['dailyRecords as recorded_for_date' => fn ($query) => $query->whereDate('record_date', $this->recordDate)])
+            ->withCount('dailyRecords')
+            ->withMax('dailyRecords', 'record_date')
             ->where('status', 'active')
             ->orderBy('full_name')
-            ->get(['id', 'student_number', 'full_name', 'first_name', 'family_name', 'photo_private_file_id']);
+            ->get();
 
         $students = $allStudents;
         if (trim($this->studentSearch) !== '') {
@@ -434,11 +500,52 @@ class TeacherDailyRecorder extends Component
         }
 
         $surahs = QuranSurah::query()->orderBy('id')->get(['id', 'name_arabic', 'verses_count']);
+        $historyStudent = $allStudents->firstWhere('id', (int) $this->historyStudentId);
+        $historyRecords = collect();
+        $historySummary = ['total' => 0, 'filtered' => 0, 'last_date' => null];
+
+        if ($historyStudent) {
+            $allHistory = DailyRecord::query()->where('student_id', $historyStudent->id);
+            $historySummary['total'] = (clone $allHistory)->count();
+            $historySummary['last_date'] = (clone $allHistory)->max('record_date');
+
+            $filteredHistory = match ($this->historyFilter) {
+                'memorization' => (clone $allHistory)->whereHas(
+                    'recitationItems',
+                    fn ($items) => $items->where('type', RecitationType::NewMemorization->value),
+                ),
+                'revision' => (clone $allHistory)->whereHas(
+                    'recitationItems',
+                    fn ($items) => $items->whereIn('type', [
+                        RecitationType::RecentRevision->value,
+                        RecitationType::OldRevision->value,
+                    ]),
+                ),
+                default => clone $allHistory,
+            };
+
+            $historySummary['filtered'] = (clone $filteredHistory)->count();
+            $historyRecords = $filteredHistory
+                ->with([
+                    'attendance',
+                    'halaqa:id,name',
+                    'teacher.user:id,name',
+                    'recitationItems.startAyah.surah:id,name_arabic',
+                    'recitationItems.endAyah.surah:id,name_arabic',
+                ])
+                ->latest('record_date')
+                ->latest('id')
+                ->limit(min(30, max(5, $this->historyLimit)))
+                ->get();
+        }
 
         return view('livewire.teacher-daily-recorder', [
             'halaqas' => $halaqas,
             'students' => $students,
             'selectedStudent' => $allStudents->firstWhere('id', (int) $this->studentId),
+            'historyStudent' => $historyStudent,
+            'historyRecords' => $historyRecords,
+            'historySummary' => $historySummary,
             'studentStats' => [
                 'total' => $allStudents->count(),
                 'recorded' => $allStudents->where('recorded_for_date', true)->count(),
@@ -495,6 +602,38 @@ class TeacherDailyRecorder extends Component
         }
 
         return $teacher;
+    }
+
+    private function studentInSelectedHalaqa(int $studentId): ?Student
+    {
+        if ($this->halaqaId === '' || $this->recordDate === '') {
+            return null;
+        }
+
+        $teacher = $this->authenticatedTeacherProfile(false);
+        $hasAssignedHalaqa = Halaqa::query()
+            ->whereKey((int) $this->halaqaId)
+            ->where('active', true)
+            ->whereHas('teacherAssignments', function ($assignments) use ($teacher) {
+                $assignments->where('teacher_profile_id', $teacher->id)
+                    ->whereDate('starts_at', '<=', $this->recordDate)
+                    ->where(fn ($dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', $this->recordDate));
+            })
+            ->exists();
+
+        if (! $hasAssignedHalaqa) {
+            return null;
+        }
+
+        return Student::query()
+            ->whereKey($studentId)
+            ->where('status', 'active')
+            ->whereHas('enrollments', function ($enrollments) {
+                $enrollments->where('halaqa_id', $this->halaqaId)
+                    ->whereDate('starts_at', '<=', $this->recordDate)
+                    ->where(fn ($dates) => $dates->whereNull('ends_at')->orWhereDate('ends_at', '>=', $this->recordDate));
+            })
+            ->first();
     }
 
     private function ayah(int $surahId, int $ayahNumber, string $field): QuranAyah

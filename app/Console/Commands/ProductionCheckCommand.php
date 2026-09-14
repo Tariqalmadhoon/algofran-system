@@ -7,13 +7,23 @@ use Illuminate\Console\Command;
 
 class ProductionCheckCommand extends Command
 {
-    protected $signature = 'system:production-check {--json : Return machine-readable JSON output}';
+    protected $signature = 'system:production-check
+        {--json : Return machine-readable JSON output}
+        {--profile=vps : Hosting profile: vps or shared}
+        {--document-root= : Actual web document root when public files are published separately}';
 
     protected $description = 'Verify production configuration and operational prerequisites without exposing secrets';
 
     public function handle(ProductionReadinessService $readiness): int
     {
-        $checks = $readiness->checks();
+        $profile = (string) $this->option('profile');
+        if (! in_array($profile, ['vps', 'shared'], true)) {
+            $this->error('Unsupported hosting profile. Use vps or shared.');
+
+            return self::INVALID;
+        }
+
+        $checks = $readiness->checks($profile, $this->option('document-root') ?: null);
         $passed = $readiness->passed($checks);
 
         if ($this->option('json')) {

@@ -141,10 +141,23 @@ class AlertCenter extends Component
     private function visibleHalaqas(): Builder
     {
         $query = Halaqa::query()->where('active', true);
-        $teacherId = auth()->user()->teacherProfile?->id;
+        $user = auth()->user();
+        $teacherId = $user->teacherProfile?->id;
 
-        if (! $this->teachingScope || ! $teacherId) {
+        if (! $this->teachingScope && $user->hasRole('super-admin')) {
             return $query;
+        }
+
+        if (! $this->teachingScope && $user->hasAnyRole(['center-manager', 'academic-supervisor', 'registrar'])) {
+            $centerId = $user->staffProfile?->center_id;
+
+            return $centerId
+                ? $query->where('center_id', $centerId)
+                : $query->whereRaw('1 = 0');
+        }
+
+        if (! $teacherId) {
+            return $query->whereRaw('1 = 0');
         }
 
         return $query->whereHas('teacherAssignments', fn (Builder $assignments) => $assignments

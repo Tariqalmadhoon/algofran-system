@@ -142,12 +142,20 @@ class PhaseFivePublicCmsApiTest extends TestCase
         $this->get(route('news.show', $content))->assertOk()->assertSee($media->url);
     }
 
-    public function test_contact_form_stores_message_for_cms_inbox(): void
+    public function test_contact_page_uses_the_official_whatsapp_channel_and_center_map(): void
     {
-        $this->post(route('public.contact.store'), ['name' => 'زائر الموقع', 'phone' => '0599000000', 'email' => 'visitor@example.com', 'subject' => 'استفسار عن التسجيل', 'message' => 'أرغب بمعرفة البرامج المتاحة.', 'website' => ''])
-            ->assertRedirect()->assertSessionHas('success');
+        $this->get(route('public.contact'))
+            ->assertOk()
+            ->assertSee('نتواصل معكم عبر واتساب')
+            ->assertSee('https://wa.me/972567973076', false)
+            ->assertSee('31.382208090207207,34.331760937834474')
+            ->assertSee('فتح في خرائط Google')
+            ->assertDontSee('البريد الإلكتروني')
+            ->assertDontSee('name="email"', false)
+            ->assertDontSee('public.contact.store', false);
 
-        $this->assertDatabaseHas('contact_messages', ['phone' => '0599000000', 'status' => 'new']);
+        $this->post('/contact', ['name' => 'لا يجب أن تحفظ رسالة عامة'])
+            ->assertStatus(405);
     }
 
     public function test_sanctum_api_authenticates_and_scopes_mobile_data(): void

@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\UserResource;
+use App\Models\MobileDevice;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\MobileTwoFactorChallengeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\PersonalAccessToken;
 
@@ -16,7 +18,14 @@ class AuthController extends Controller
 {
     public function login(Request $request, AuditLogger $audit, MobileTwoFactorChallengeService $challenges): JsonResponse
     {
-        $data = $request->validate(['email' => ['required', 'email'], 'password' => ['required', 'string'], 'device_name' => ['required', 'string', 'max:100']]);
+        $data = $request->validate([
+            'email' => ['required', 'email'],
+            'password' => ['required', 'string'],
+            'device_name' => ['required', 'string', 'max:100'],
+            'device_uuid' => ['nullable', 'uuid'],
+            'platform' => ['nullable', 'string', 'in:android,ios'],
+            'app_version' => ['nullable', 'string', 'max:30'],
+        ]);
         $user = User::query()->where('email', $data['email'])->first();
         if (! $user || ! Hash::check($data['password'], $user->password)) {
             return response()->json(['message' => 'بيانات الدخول غير صحيحة.', 'error' => ['code' => 'invalid_credentials']], 422);
@@ -33,7 +42,7 @@ class AuthController extends Controller
         }
 
         if (config('system.identity.two_factor_enabled', false) && $user->hasEnabledTwoFactorAuthentication()) {
-            $challenge = $challenges->issue($user, $data['device_name']);
+            $challenge = $challenges->issue($user, $data['device_name'], $this->deviceData($data));
 
             return response()->json([
                 'message' => 'أدخل رمز المصادقة الثنائية لإكمال تسجيل الدخول.',
@@ -45,7 +54,7 @@ class AuthController extends Controller
             ], 202);
         }
 
-        return $this->issueToken($user, $data['device_name'], $audit);
+        return $this->issueToken($user, $data['device_name'], $audit, $this->deviceData($data));
     }
 
     public function twoFactorChallenge(
@@ -75,19 +84,67 @@ class AuthController extends Controller
 
         $audit->record('api.two-factor.passed', $challenge['user'], actor: $challenge['user']);
 
-        return $this->issueToken($challenge['user'], $challenge['device_name'], $audit);
+        return $this->issueToken(
+            $challenge['user'],
+            $challenge['device_name'],
+            $audit,
+            $challenge['device'] ?? [],
+        );
     }
 
-    private function issueToken(User $user, string $deviceName, AuditLogger $audit): JsonResponse
+    private function issueToken(User $user, string $deviceName, AuditLogger $audit, array $deviceData = []): JsonResponse
     {
         abort_if(! $user->active || $user->archived_at, 403, 'هذا الحساب غير نشط.');
-        $user->tokens()->where('name', $deviceName)->delete();
-        $expiresAt = now()->addMinutes((int) config('sanctum.expiration', 43200));
-        $token = $user->createToken($deviceName, ['mobile:read'], $expiresAt)->plainTextToken;
-        $user->forceFill(['last_login_at' => now()])->save();
-        $audit->record('api-token.created', $user, newValues: ['device_name' => $deviceName, 'expires_at' => $expiresAt->toIso8601String()], actor: $user);
 
-        return response()->json(['message' => 'تم تسجيل الدخول بنجاح.', 'data' => ['token' => $token, 'token_type' => 'Bearer', 'expires_at' => $expiresAt->toIso8601String(), 'user' => new UserResource($user)]]);
+        return DB::transaction(function () use ($user, $deviceName, $audit, $deviceData): JsonResponse {
+            $deviceUuid = $deviceData['device_uuid'] ?? null;
+            $tokenName = $deviceUuid ? $deviceName.' ['.$deviceUuid.']' : $deviceName;
+            $tokenNamesToReplace = $deviceUuid ? [$tokenName, $deviceName] : [$tokenName];
+            $user->tokens()->whereIn('name', $tokenNamesToReplace)->delete();
+            $expiresAt = now()->addMinutes((int) config('sanctum.expiration', 43200));
+            $abilities = ['mobile:read'];
+            if ($user->can('recitations.create')
+                && $user->can('attendance.manage')
+                && $user->teacherProfile()->where('active', true)->exists()) {
+                $abilities[] = 'mobile:sync';
+            }
+            if ($user->can('recitations.export')
+                && $user->teacherProfile()->where('active', true)->exists()) {
+                $abilities[] = 'mobile:export';
+            }
+
+            $token = $user->createToken($tokenName, $abilities, $expiresAt)->plainTextToken;
+            $device = null;
+            if (! empty($deviceData['device_uuid'])) {
+                $device = MobileDevice::query()->updateOrCreate([
+                    'user_id' => $user->id,
+                    'uuid' => $deviceData['device_uuid'],
+                ], [
+                    'name' => $deviceName,
+                    'platform' => $deviceData['platform'] ?? null,
+                    'app_version' => $deviceData['app_version'] ?? null,
+                    'last_seen_at' => now(),
+                    'disabled_at' => null,
+                ]);
+            }
+
+            $user->forceFill(['last_login_at' => now()])->save();
+            $audit->record('api-token.created', $user, newValues: [
+                'device_name' => $deviceName,
+                'device_uuid' => $device?->uuid,
+                'abilities' => $abilities,
+                'expires_at' => $expiresAt->toIso8601String(),
+            ], actor: $user);
+
+            return response()->json(['message' => 'تم تسجيل الدخول بنجاح.', 'data' => [
+                'token' => $token,
+                'token_type' => 'Bearer',
+                'expires_at' => $expiresAt->toIso8601String(),
+                'abilities' => $abilities,
+                'device_uuid' => $device?->uuid,
+                'user' => new UserResource($user),
+            ]]);
+        });
     }
 
     public function current(Request $request): UserResource
@@ -105,5 +162,14 @@ class AuthController extends Controller
         }
 
         return response()->json(['message' => 'تم تسجيل الخروج وإلغاء رمز الجهاز.']);
+    }
+
+    private function deviceData(array $data): array
+    {
+        return [
+            'device_uuid' => $data['device_uuid'] ?? null,
+            'platform' => $data['platform'] ?? null,
+            'app_version' => $data['app_version'] ?? null,
+        ];
     }
 }

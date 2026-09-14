@@ -6,7 +6,9 @@ use App\Models\CmsContent;
 use App\Models\CmsMedia;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 
 class GofranPublicContentSeeder extends Seeder
 {
@@ -40,6 +42,8 @@ class GofranPublicContentSeeder extends Seeder
                 'caption' => 'نحتفي بالاجتهاد ونحوّل كل إنجاز إلى دافع للمواصلة.',
             ],
         ];
+
+        $this->publishSeedMediaFiles($mediaItems);
 
         $media = collect($mediaItems)->mapWithKeys(function (array $item, string $key) use ($author): array {
             $record = CmsMedia::withTrashed()->firstOrNew(['disk' => 'public', 'path' => $item['path']]);
@@ -118,5 +122,28 @@ class GofranPublicContentSeeder extends Seeder
         }
 
         $this->command?->info('Gofran public news, activities, and media are ready.');
+    }
+
+    /**
+     * Keep CMS seed records and their public media inseparable. The local
+     * storage directory is intentionally ignored by Git, so a fresh checkout
+     * must obtain these curated SVG assets from versioned source files.
+     *
+     * @param array<string, array{path:string}> $mediaItems
+     */
+    private function publishSeedMediaFiles(array $mediaItems): void
+    {
+        $disk = Storage::disk('public');
+
+        foreach ($mediaItems as $item) {
+            if ($disk->exists($item['path'])) {
+                continue;
+            }
+
+            $asset = database_path('seeders/assets/gofran/'.basename($item['path']));
+            if (! File::isFile($asset) || ! $disk->put($item['path'], File::get($asset))) {
+                throw new RuntimeException("Unable to publish the required CMS seed asset [{$item['path']}].");
+            }
+        }
     }
 }

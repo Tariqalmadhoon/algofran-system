@@ -2,8 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
 use App\Services\ApplicationReadinessService;
+use App\Services\ProductionReadinessService;
+use Illuminate\Broadcasting\Broadcasters\NullBroadcaster;
+use Illuminate\Contracts\Broadcasting\Factory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Env;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
@@ -12,6 +17,34 @@ use Tests\TestCase;
 class PhaseSevenOperationsTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_shared_null_broadcast_environment_resolves_a_real_null_driver(): void
+    {
+        $environment = Env::getRepository();
+        $previous = $environment->get('BROADCAST_CONNECTION');
+        try {
+            $environment->set('BROADCAST_CONNECTION', 'null');
+            $broadcasting = require config_path('broadcasting.php');
+            $this->assertSame('null', $broadcasting['default']);
+            config(['broadcasting.default' => $broadcasting['default']]);
+            $this->assertInstanceOf(
+                NullBroadcaster::class,
+                app(Factory::class)->connection(),
+            );
+        } finally {
+            $previous === null ? $environment->clear('BROADCAST_CONNECTION') : $environment->set('BROADCAST_CONNECTION', $previous);
+        }
+    }
+
+    public function test_preflight_blocks_known_demo_password_but_allows_the_account_after_password_change(): void
+    {
+        $user = User::factory()->create(['email' => 'admin1@gofran.com', 'password' => '123456789']);
+        $checks = collect(app(ProductionReadinessService::class)->checks('shared'))->keyBy('name');
+        $this->assertFalse($checks['demo_accounts']['passed']);
+        $user->update(['password' => 'StrongProductionTestPassword!']);
+        $checks = collect(app(ProductionReadinessService::class)->checks('shared'))->keyBy('name');
+        $this->assertTrue($checks['demo_accounts']['passed']);
+    }
 
     public function test_readiness_endpoint_reports_only_the_operational_state(): void
     {
@@ -50,6 +83,15 @@ class PhaseSevenOperationsTest extends TestCase
 
     public function test_production_check_accepts_a_hardened_configuration(): void
     {
+        $storageLink = public_path('storage');
+        $storageTarget = storage_path('app/public');
+        $createdStorageLink = ! is_link($storageLink) && ! file_exists($storageLink);
+
+        if ($createdStorageLink) {
+            File::ensureDirectoryExists($storageTarget);
+            $this->artisan('storage:link')->assertSuccessful();
+        }
+
         config([
             'app.env' => 'production',
             'app.debug' => false,
@@ -71,12 +113,18 @@ class PhaseSevenOperationsTest extends TestCase
             'reverb.apps.apps.0.allowed_origins' => ['alquran.example'],
         ]);
 
-        $exitCode = Artisan::call('system:production-check', ['--json' => true]);
-        $result = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+        try {
+            $exitCode = Artisan::call('system:production-check', ['--json' => true]);
+            $result = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
 
-        $this->assertSame(0, $exitCode, json_encode($result, JSON_PRETTY_PRINT));
-        $this->assertSame('ready', $result['status']);
-        $this->assertNotEmpty($result['checks']);
+            $this->assertSame(0, $exitCode, json_encode($result, JSON_PRETTY_PRINT));
+            $this->assertSame('ready', $result['status']);
+            $this->assertNotEmpty($result['checks']);
+        } finally {
+            if ($createdStorageLink && is_link($storageLink) && realpath($storageLink) === realpath($storageTarget)) {
+                File::delete($storageLink);
+            }
+        }
     }
 
     public function test_backup_manifest_detects_artifact_tampering(): void
@@ -109,6 +157,48 @@ class PhaseSevenOperationsTest extends TestCase
                 'manifest' => $manifest,
                 '--directory' => $directory,
             ]));
+        } finally {
+            File::deleteDirectory($directory);
+        }
+    }
+
+    public function test_shared_profile_requires_polling_and_keeps_security_checks_required(): void
+    {
+        config(['broadcasting.default' => 'null']);
+
+        $checks = collect(app(ProductionReadinessService::class)->checks('shared'))->keyBy('name');
+        $this->assertTrue($checks['realtime']['passed']);
+        foreach (['environment', 'debug_disabled', 'https_url', 'app_key', 'database', 'migrations', 'private_storage', 'secure_cookie'] as $name) {
+            $this->assertTrue($checks[$name]['required']);
+        }
+
+        config(['broadcasting.default' => 'reverb']);
+        $checks = collect(app(ProductionReadinessService::class)->checks('shared'))->keyBy('name');
+        $this->assertFalse($checks['realtime']['passed']);
+        $this->assertSame(2, Artisan::call('system:production-check', ['--profile' => 'unknown']));
+    }
+
+    public function test_preflight_uses_the_actual_shared_document_root_and_rejects_exposed_secrets(): void
+    {
+        $directory = storage_path('framework/testing/shared-public-'.Str::uuid());
+        File::ensureDirectoryExists($directory);
+
+        try {
+            $readiness = app(ProductionReadinessService::class);
+            $checks = collect($readiness->checks('shared', $directory))->keyBy('name');
+            $this->assertTrue($checks['document_root']['passed']);
+            $this->assertFalse($checks['public_storage_link']['passed']);
+
+            File::put($directory.'/.env', 'hidden');
+            $checks = collect($readiness->checks('shared', $directory))->keyBy('name');
+            $this->assertFalse($checks['document_root']['passed']);
+
+            config(['filesystems.disks.private.root' => $directory]);
+            $checks = collect($readiness->checks('shared', $directory))->keyBy('name');
+            $this->assertFalse($checks['private_storage']['passed']);
+
+            $checks = collect($readiness->checks('shared', base_path()))->keyBy('name');
+            $this->assertFalse($checks['document_root']['passed']);
         } finally {
             File::deleteDirectory($directory);
         }
