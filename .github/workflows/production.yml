@@ -32,7 +32,9 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          extensions: mbstring, dom, fileinfo, pdo_sqlite, pdo_mysql
+          # Feature tests create fake avatar, student, and CMS images; Laravel
+          # requires GD to generate those image fixtures on the Ubuntu runner.
+          extensions: mbstring, dom, fileinfo, gd, pdo_sqlite, pdo_mysql
           coverage: none
 
       - name: Set up Node.js
