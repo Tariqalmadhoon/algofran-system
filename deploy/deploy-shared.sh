@@ -80,8 +80,7 @@ trap cleanup_temporary_file EXIT
 trap 'echo "Deployment failed; maintenance remains enabled. Complete or recover the release before artisan up." >&2' ERR
 
 php artisan down --retry=60 --refresh=15
-composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progress
-if [[ -n "$ASSET_ARCHIVE" ]]; then
+php -d disable_functions="system,exec,shell_exec,passthru,mysql_list_dbs,ini_alter,dl,symlink,link,chgrp,leak,popen,apache_child_terminate,virtual,mb_send_mail" "$(command -v composer)" install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-progressif [[ -n "$ASSET_ARCHIVE" ]]; then
     # This archive is produced by CI from the exact tested commit. Extract only
     # build/ entries, and reject paths escaping public/ or archive symlinks.
     php -r '
