@@ -48,4 +48,24 @@ class StudentVisibilityService
     {
         return $this->queryFor($user)->whereKey($student)->exists();
     }
+
+    /** @return Builder<Student> */
+    public function trashedQueryFor(User $user): Builder
+    {
+        $query = Student::onlyTrashed();
+
+        if ($user->hasRole('super-admin')) {
+            return $query;
+        }
+
+        if ($user->hasAnyRole(['center-manager', 'academic-supervisor', 'registrar'])) {
+            $centerId = $user->staffProfile?->center_id;
+
+            return $centerId
+                ? $query->whereHas('enrollments.halaqa', fn (Builder $halaqa) => $halaqa->where('center_id', $centerId))
+                : $query->whereRaw('1 = 0');
+        }
+
+        return $query->whereRaw('1 = 0');
+    }
 }

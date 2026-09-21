@@ -60,6 +60,7 @@ return [
         'api_base_url' => env('MOBILE_API_BASE_URL'),
         'release_notes' => env('MOBILE_APP_RELEASE_NOTES'),
         'published_at' => env('MOBILE_APP_PUBLISHED_AT'),
+        'upload_max_kilobytes' => (int) env('MOBILE_APP_UPLOAD_MAX_KILOBYTES', 131072),
     ],
 
     'public_contact' => [

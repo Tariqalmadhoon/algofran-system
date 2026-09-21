@@ -3,11 +3,13 @@
 namespace Tests\Feature;
 
 use App\Actions\Guardians\CreateGuardianAction;
+use App\Actions\Students\ArchiveStudentAction;
 use App\Actions\Students\CreateStudentAction;
 use App\Actions\Students\EnrollStudentInHalaqaAction;
 use App\Actions\Students\RecordInitialBaselineAction;
 use App\Livewire\StudentProfile;
 use App\Livewire\StudentsIndex;
+use App\Livewire\StudentTrash;
 use App\Livewire\TeacherDailyRecorder;
 use App\Models\Branch;
 use App\Models\Center;
@@ -519,21 +521,55 @@ class PhaseTwoStudentTrackingTest extends TestCase
 
         Livewire::actingAs($teacherUser)
             ->test(StudentsIndex::class)
-            ->assertSee('أرشفة')
+            ->assertSee('حذف')
             ->call('archiveStudent', $student->id)
             ->assertHasNoErrors()
-            ->assertSee('تمت أرشفة الطالب وإنهاء إلحاقه الحالي مع الاحتفاظ بسجلاته كاملة.');
+            ->assertSee('نُقل ملف الطالب إلى سلة المهملات مع الاحتفاظ بسجلاته كاملة.');
 
-        $student = $student->fresh();
+        $student = Student::withTrashed()->findOrFail($student->id);
         $this->assertSame('archived', $student->status->value);
         $this->assertNull($student->current_halaqa_id);
-        $this->assertNull($student->deleted_at);
+        $this->assertNotNull($student->deleted_at);
         $this->assertDatabaseHas('halaqa_enrollments', [
             'student_id' => $student->id,
             'halaqa_id' => $halaqa->id,
             'ends_at' => today()->toDateString(),
         ]);
         $this->assertDatabaseHas('audit_logs', ['action' => 'student.archived', 'auditable_id' => $student->id]);
+    }
+
+    public function test_administrator_can_restore_or_permanently_delete_students_from_the_trash(): void
+    {
+        $administrator = User::factory()->create();
+        $administrator->assignRole('super-admin');
+        [$center, $branch, $halaqa] = $this->organization();
+        $student = $this->createStudent($administrator, $halaqa, 'STU-TRASH');
+
+        app(ArchiveStudentAction::class)->execute($student, $administrator);
+
+        Livewire::actingAs($administrator)
+            ->test(StudentTrash::class)
+            ->assertSee('سلة مهملات الطلاب')
+            ->assertSee($student->full_name)
+            ->call('restoreStudent', $student->id)
+            ->assertHasNoErrors()
+            ->assertSee('استُعيد ملف الطالب إلى قائمة الطلاب. يلزم إلحاقه بحلقة من ملفه عند الحاجة.');
+
+        $restored = Student::query()->findOrFail($student->id);
+        $this->assertSame('active', $restored->status->value);
+        $this->assertNull($restored->pre_archive_status);
+        $this->assertNull($restored->current_halaqa_id);
+
+        app(ArchiveStudentAction::class)->execute($restored, $administrator);
+
+        Livewire::actingAs($administrator)
+            ->test(StudentTrash::class)
+            ->call('permanentlyDeleteStudent', $student->id)
+            ->assertHasNoErrors()
+            ->assertSee('حُذف ملف الطالب نهائيًا مع البيانات المرتبطة به.');
+
+        $this->assertNull(Student::withTrashed()->find($student->id));
+        $this->assertDatabaseHas('audit_logs', ['action' => 'student.permanently_deleted', 'auditable_id' => $student->id]);
     }
 
     public function test_whatsapp_contact_links_normalize_local_and_international_numbers(): void

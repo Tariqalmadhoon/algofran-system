@@ -20,4 +20,11 @@ class StudentController extends Controller
 
         return view('students.show', compact('student'));
     }
+
+    public function trash(): View
+    {
+        $this->authorize('viewTrash', Student::class);
+
+        return view('students.trash');
+    }
 }

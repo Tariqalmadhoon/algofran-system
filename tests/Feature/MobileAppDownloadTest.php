@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Mobile\PublishAndroidReleaseAction;
 use App\Models\Center;
 use App\Models\TeacherProfile;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -117,6 +119,42 @@ class MobileAppDownloadTest extends TestCase
         config(['system.mobile_app.release_enabled' => false]);
         $this->getJson('/api/v1/mobile/releases/latest')->assertJsonPath('data.release_available', false);
         $this->get('/api/v1/mobile/releases/android/4/download')->assertNotFound();
+    }
+
+    public function test_administrator_can_publish_a_verified_private_release_from_the_dashboard_workflow(): void
+    {
+        Storage::fake('private');
+        config([
+            'app.url' => 'https://algofran-center.tech',
+            'system.mobile_app.release_enabled' => false,
+            'system.mobile_app.api_base_url' => 'https://algofran-center.tech/api/v1',
+        ]);
+        $administrator = User::factory()->create();
+        $administrator->assignRole('super-admin');
+        $contents = 'signed-release-apk-1.3.2';
+        $checksum = hash('sha256', $contents);
+
+        $release = app(PublishAndroidReleaseAction::class)->execute($administrator, [
+            'version' => '1.3.2',
+            'version_code' => 6,
+            'minimum_version_code' => 3,
+            'release_notes' => 'تحديث تجريبي موثّق.',
+        ], UploadedFile::fake()->createWithContent('gofran-mobile.apk', $contents), UploadedFile::fake()->createWithContent('gofran-mobile.apk.sha256', $checksum), UploadedFile::fake()->createWithContent('gofran-mobile.apk.json', json_encode([
+            'application_id' => 'com.gofran.gofran_mobile',
+            'version_name' => '1.3.2',
+            'version_code' => 6,
+            'debuggable' => false,
+            'api_base_url' => 'https://algofran-center.tech/api/v1',
+            'signing_certificate_sha256' => str_repeat('d', 64),
+            'size_bytes' => strlen($contents),
+            'sha256' => $checksum,
+        ], JSON_THROW_ON_ERROR)));
+
+        $this->assertSame('1.3.2', $release['version_name']);
+        $this->assertSame(6, $release['version_code']);
+        Storage::disk('private')->assertExists('releases/gofran-mobile-1.3.2-6.apk');
+        $this->assertDatabaseHas('settings', ['group' => 'mobile_app', 'key' => 'version_code', 'value' => '6']);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'mobile.release_published', 'user_id' => $administrator->id]);
     }
 
     private function publishFixture(array $overrides = []): string

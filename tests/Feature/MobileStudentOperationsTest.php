@@ -181,7 +181,7 @@ class MobileStudentOperationsTest extends TestCase
         $this->assertDatabaseHas('students', ['full_name' => 'طالب جديد داخل الحلقة']);
     }
 
-    public function test_archive_preserves_records_ends_enrollment_and_never_soft_deletes_student(): void
+    public function test_archive_moves_student_to_trash_and_preserves_records_until_a_manager_deletes_them(): void
     {
         [$user, $teacher, $halaqa] = $this->teacherWorkspace();
         $student = $this->student($halaqa, 'ARCHIVE-001');
@@ -215,10 +215,10 @@ class MobileStudentOperationsTest extends TestCase
             ->assertJsonPath('data.results.0.student.status', 'archived')
             ->assertJsonPath('data.results.0.student.halaqa', null);
 
-        $archived = Student::query()->findOrFail($student->id);
+        $archived = Student::withTrashed()->findOrFail($student->id);
         $this->assertSame('archived', $archived->status->value);
         $this->assertNull($archived->current_halaqa_id);
-        $this->assertNull($archived->deleted_at);
+        $this->assertNotNull($archived->deleted_at);
         $this->assertDatabaseHas('halaqa_enrollments', [
             'student_id' => $student->id,
             'halaqa_id' => $halaqa->id,

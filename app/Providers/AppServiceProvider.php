@@ -40,6 +40,16 @@ class AppServiceProvider extends ServiceProvider
     {
         Password::defaults(fn () => Password::min(10)->mixedCase()->numbers()->symbols());
 
+        // The signed Android release is larger than Livewire's conservative
+        // default (12 MB). Individual forms still enforce their own lower
+        // limits; this only permits the protected release publisher to accept
+        // the configured APK size.
+        config()->set('livewire.temporary_file_upload.rules', [
+            'required',
+            'file',
+            'max:'.max(1024, (int) config('system.mobile_app.upload_max_kilobytes', 131072)),
+        ]);
+
         Gate::before(function (User $user): ?bool {
             return $user->hasRole('super-admin') ? true : null;
         });

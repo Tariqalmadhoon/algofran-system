@@ -5,9 +5,17 @@
             <h1 class="page-title">ملفات الطلاب</h1>
             <p class="page-subtitle">{{ $teacherMode ? 'أضف طلابك مباشرة إلى الحلقات المسندة إليك وتابع ملفاتهم.' : 'بحث سريع، بيانات موثقة، وحالة التحاق حالية مع تاريخ كامل للنقل بين الحلقات.' }}</p>
         </div>
-        @can('create', App\Models\Student::class)
-            <button class="btn-primary flex" type="button" x-data @click="$dispatch('toggle-student-form')">{{ $teacherMode ? 'إضافة طالب إلى حلقتي' : 'إضافة طالب' }}</button>
-        @endcan
+        <div class="flex flex-wrap gap-3">
+            @can('viewTrash', App\Models\Student::class)
+                <a href="{{ route('students.trash') }}" class="btn-secondary flex items-center gap-2">
+                    <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16m-10 4v6m4-6v6M9 7l1-3h4l1 3m-9 0 1 13h10l1-13" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    سلة المهملات
+                </a>
+            @endcan
+            @can('create', App\Models\Student::class)
+                <button class="btn-primary flex" type="button" x-data @click="$dispatch('toggle-student-form')">{{ $teacherMode ? 'إضافة طالب إلى حلقتي' : 'إضافة طالب' }}</button>
+            @endcan
+        </div>
     </header>
 
     <x-flash-messages inline consume />
@@ -44,7 +52,7 @@
     <section class="panel space-y-5">
         <div class="grid gap-3 md:grid-cols-3">
             <label><span class="form-label">بحث</span><input wire:model.live.debounce.350ms="search" class="form-input" placeholder="الاسم، الرقم، الهوية أو الهاتف"></label>
-            <label><span class="form-label">الحالة</span><select wire:model.live="statusFilter" class="form-input"><option value="">غير المؤرشفين</option>@foreach($statuses as $studentStatus)<option value="{{ $studentStatus->value }}">{{ $studentStatus->label() }}</option>@endforeach</select></label>
+            <label><span class="form-label">الحالة</span><select wire:model.live="statusFilter" class="form-input"><option value="">كل الحالات</option>@foreach($statuses as $studentStatus)<option value="{{ $studentStatus->value }}">{{ $studentStatus->label() }}</option>@endforeach</select></label>
             <label><span class="form-label">الحلقة</span><select wire:model.live="halaqaFilter" class="form-input"><option value="">كل الحلقات</option>@foreach($halaqas as $halaqa)<option value="{{ $halaqa->id }}">{{ $halaqa->name }}</option>@endforeach</select></label>
         </div>
 
@@ -71,7 +79,7 @@
                                     <a class="text-sm font-bold text-emerald-700 hover:text-emerald-900" href="{{ route('students.show', $student) }}">فتح الملف</a>
                                     @can('archive', $student)
                                         @if($student->status->value !== 'archived')
-                                            <button type="button" class="text-xs font-black text-rose-600 transition hover:text-rose-800" @click="$dispatch('app:confirm', { title: 'أرشفة الطالب', message: 'سيُنهى إلحاق الطالب الحالي ويختفي من القائمة، مع الاحتفاظ بسجلات الحفظ والحضور والتاريخ كاملًا.', confirmLabel: 'أرشفة الطالب', tone: 'danger', action: () => $wire.archiveStudent({{ $student->id }}) })">أرشفة</button>
+                                            <button type="button" class="text-xs font-black text-rose-600 transition hover:text-rose-800" @click="$dispatch('app:confirm', { title: 'نقل الطالب إلى سلة المهملات', message: 'سيُنهى إلحاق الطالب الحالي ويختفي من قائمة الطلاب. تستطيع الإدارة استعادته لاحقًا من سلة المهملات، وسجلات الحفظ والحضور ستبقى محفوظة.', confirmLabel: 'نقل إلى السلة', tone: 'danger', action: () => $wire.archiveStudent({{ $student->id }}) })">حذف</button>
                                         @endif
                                     @endcan
                                 </div>
