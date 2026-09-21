@@ -71,4 +71,10 @@ return [
         'latitude' => env('PUBLIC_CENTER_LATITUDE', '31.382208090207207'),
         'longitude' => env('PUBLIC_CENTER_LONGITUDE', '34.331760937834474'),
     ],
+
+    'contact_phone' => [
+        // Local mobile numbers such as 059xxxxxxx are expanded only when a
+        // WhatsApp link is generated; the original number remains unchanged.
+        'default_country_calling_code' => env('CONTACT_PHONE_DEFAULT_COUNTRY_CALLING_CODE', '972'),
+    ],
 ];

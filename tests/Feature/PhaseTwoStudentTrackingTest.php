@@ -25,6 +25,7 @@ use App\Services\PrivateFileService;
 use App\Services\QuranRangeService;
 use App\Services\ReportDataService;
 use App\Services\StudentVisibilityService;
+use App\Services\WhatsAppLinkService;
 use Database\Seeders\QuranReferenceSeeder;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -261,11 +262,14 @@ class PhaseTwoStudentTrackingTest extends TestCase
             ->assertSet('halaqaId', (string) $ownHalaqa->id)
             ->assertSee($ownHalaqa->name)
             ->assertDontSee($otherHalaqa->name)
+            ->assertDontSee('نوع الكفالة')
+            ->assertDontSee('جهة الكفالة')
             ->set('studentNumber', 'STU-TEACHER-001')
             ->set('firstName', 'محمد')
             ->set('fatherName', 'أحمد')
             ->set('grandfatherName', 'علي')
             ->set('familyName', 'الغفران')
+            ->set('contactPhone', '0599000055')
             ->set('photo', UploadedFile::fake()->image('student-photo.jpg', 400, 400))
             ->call('save')
             ->assertHasNoErrors()
@@ -273,6 +277,7 @@ class PhaseTwoStudentTrackingTest extends TestCase
 
         $student = Student::query()->where('student_number', 'STU-TEACHER-001')->firstOrFail();
         $this->assertSame($ownHalaqa->id, $student->current_halaqa_id);
+        $this->assertSame('0599000055', $student->contact_phone);
         $this->assertNotNull($student->photo_private_file_id);
         $this->assertDatabaseHas('private_files', [
             'id' => $student->photo_private_file_id,
@@ -282,7 +287,8 @@ class PhaseTwoStudentTrackingTest extends TestCase
         $photo = PrivateFile::query()->findOrFail($student->photo_private_file_id);
         Livewire::actingAs($teacherUser)
             ->test(StudentsIndex::class)
-            ->assertSee(route('private-files.preview', $photo), false);
+            ->assertSee(route('private-files.preview', $photo), false)
+            ->assertSee('https://wa.me/972599000055', false);
 
         Livewire::actingAs($teacherUser)
             ->test(StudentsIndex::class)
@@ -329,6 +335,8 @@ class PhaseTwoStudentTrackingTest extends TestCase
             ->assertSee('لا يحتاج ولي الأمر إلى حساب مستقل')
             ->assertSee($ownHalaqa->name)
             ->assertDontSee($otherHalaqa->name)
+            ->assertDontSee('نوع الكفالة')
+            ->assertDontSee('جهة الكفالة')
             ->set('profileIdentityNumber', 'TEACHER-STUDENT-ID')
             ->set('profileContactPhone', '0599000011')
             ->set('profileNotes', 'استكمل المحفّظ ملف الطالب')
@@ -336,12 +344,14 @@ class PhaseTwoStudentTrackingTest extends TestCase
             ->set('profileIdentityDocument', UploadedFile::fake()->create('student-id.pdf', 100, 'application/pdf'))
             ->call('saveProfile')
             ->assertHasNoErrors()
+            ->assertSee('https://wa.me/972599000011', false)
             ->set('guardianName', 'خالد أحمد')
             ->set('guardianPhone', '0599000022')
             ->set('guardianRelationship', 'father')
             ->set('guardianIdentityDocument', UploadedFile::fake()->create('guardian-id.pdf', 100, 'application/pdf'))
             ->call('saveGuardian')
             ->assertHasNoErrors()
+            ->assertSee('https://wa.me/972599000022', false)
             ->set('baselineStartSurahId', '1')
             ->set('baselineStartAyahNumber', '1')
             ->set('baselineEndAyahNumber', '7')
@@ -486,6 +496,16 @@ class PhaseTwoStudentTrackingTest extends TestCase
             ->set('attendanceStatus', 'absent')
             ->call('save')
             ->assertHasErrors(['recordDate']);
+    }
+
+    public function test_whatsapp_contact_links_normalize_local_and_international_numbers(): void
+    {
+        $links = app(WhatsAppLinkService::class);
+
+        $this->assertSame('https://wa.me/972599000011', $links->conversationUrl('0599 000 011'));
+        $this->assertSame('https://wa.me/972567973076', $links->conversationUrl('+972 56 797 3076'));
+        $this->assertSame('https://wa.me/972599000011', $links->conversationUrl('00972 599 000 011'));
+        $this->assertNull($links->conversationUrl('not a phone number'));
     }
 
     public function test_excused_absence_disables_recitation_and_saves_attendance_without_evaluation(): void

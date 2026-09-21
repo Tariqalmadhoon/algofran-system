@@ -28,9 +28,7 @@
                     <label><span class="form-label">اسم العائلة</span><input wire:model="familyName" class="form-input"><x-input-error :messages="$errors->get('familyName')" /></label>
                     <label><span class="form-label">رقم الهوية</span><input wire:model="identityNumber" class="form-input" dir="ltr"><x-input-error :messages="$errors->get('identityNumber')" /></label>
                     <label><span class="form-label">تاريخ الميلاد</span><input wire:model="birthDate" type="date" class="form-input"><x-input-error :messages="$errors->get('birthDate')" /></label>
-                    <label><span class="form-label">هاتف التواصل</span><input wire:model="contactPhone" class="form-input" dir="ltr"><x-input-error :messages="$errors->get('contactPhone')" /></label>
-                    <label><span class="form-label">نوع الكفالة</span><input wire:model="sponsorshipType" class="form-input" placeholder="مثال: كفالة تعليمية"><x-input-error :messages="$errors->get('sponsorshipType')" /></label>
-                    <label><span class="form-label">جهة الكفالة</span><input wire:model="sponsorshipOrganization" class="form-input" placeholder="اسم الجهة إن وجدت"><x-input-error :messages="$errors->get('sponsorshipOrganization')" /></label>
+                    <label><span class="form-label">هاتف التواصل</span><input wire:model="contactPhone" type="tel" inputmode="tel" class="form-input" dir="ltr" placeholder="059 000 0000"><small class="mt-1 block text-xs font-medium text-emerald-700">سيظهر زر واتساب للمراسلة بعد حفظ الملف.</small><x-input-error :messages="$errors->get('contactPhone')" /></label>
                     <label><span class="form-label">تاريخ التسجيل</span><input wire:model="registrationDate" type="date" class="form-input"><x-input-error :messages="$errors->get('registrationDate')" /></label>
                     <label><span class="form-label">الحالة</span><select wire:model="status" class="form-input">@foreach($statuses as $studentStatus)<option value="{{ $studentStatus->value }}">{{ $studentStatus->label() }}</option>@endforeach</select><x-input-error :messages="$errors->get('status')" /></label>
                     <label><span class="form-label">{{ $teacherMode ? 'الحلقة المسندة إليك' : 'الحلقة الأولى' }}</span><select wire:model="halaqaId" class="form-input"><option value="">{{ $teacherMode ? 'اختر الحلقة' : 'دون حلقة حاليًا' }}</option>@foreach($halaqas as $halaqa)<option value="{{ $halaqa->id }}">{{ $halaqa->name }}</option>@endforeach</select><x-input-error :messages="$errors->get('halaqaId')" /></label>
@@ -59,7 +57,14 @@
                             <td dir="ltr">{{ $student->student_number }}</td>
                             <td><a href="{{ route('students.show', $student) }}" class="flex items-center gap-3 font-bold text-emerald-950 hover:text-emerald-700"><x-student-avatar :student="$student" size="sm" /><span>{{ $student->full_name }}</span></a></td>
                             <td>{{ $student->currentHalaqa?->name ?? 'غير ملتحق' }}</td>
-                            <td dir="ltr">{{ $student->contact_phone ?? '—' }}</td>
+                            <td>
+                                <div class="flex flex-wrap items-center gap-2" dir="ltr">
+                                    <span>{{ $student->contact_phone ?? '—' }}</span>
+                                    @can('update', $student)
+                                        <x-whatsapp-contact :phone="$student->contact_phone" label="واتساب" class="px-2 py-1.5" />
+                                    @endcan
+                                </div>
+                            </td>
                             <td><span class="{{ $student->status->value === 'active' ? 'badge-active' : 'badge-inactive' }}">{{ $student->status->label() }}</span></td>
                             <td><a class="text-sm font-bold text-emerald-700 hover:text-emerald-900" href="{{ route('students.show', $student) }}">فتح الملف</a></td>
                         </tr>

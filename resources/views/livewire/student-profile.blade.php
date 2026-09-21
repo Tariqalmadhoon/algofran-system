@@ -37,7 +37,7 @@
             <div class="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:w-[25rem]">
                 <div class="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur"><p class="text-emerald-200">تاريخ التسجيل</p><p class="mt-1 font-black" dir="ltr">{{ $student->registration_date->format('Y-m-d') }}</p></div>
                 <div class="rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur"><p class="text-emerald-200">تاريخ الميلاد</p><p class="mt-1 font-black" dir="ltr">{{ $student->birth_date?->format('Y-m-d') ?? '—' }}</p></div>
-                <div class="col-span-2 rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur sm:col-span-1"><p class="text-emerald-200">هاتف التواصل</p><p class="mt-1 font-black" dir="ltr">{{ $student->contact_phone ?? '—' }}</p></div>
+                <div class="col-span-2 rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur sm:col-span-1"><p class="text-emerald-200">هاتف التواصل</p><p class="mt-1 font-black" dir="ltr">{{ $student->contact_phone ?? '—' }}</p>@can('update', $student)<x-whatsapp-contact :phone="$student->contact_phone" label="واتساب" class="mt-2 bg-white/95 text-emerald-950 hover:bg-white" />@endcan</div>
             </div>
         </div>
         <div class="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-5">
@@ -147,9 +147,7 @@
                     <label><span class="form-label">اسم العائلة</span><input wire:model="profileFamilyName" class="form-input"><x-input-error :messages="$errors->get('profileFamilyName')" /></label>
                     <label><span class="form-label">رقم الهوية</span><input wire:model="profileIdentityNumber" class="form-input" dir="ltr"><x-input-error :messages="$errors->get('profileIdentityNumber')" /></label>
                     <label><span class="form-label">تاريخ الميلاد</span><input wire:model="profileBirthDate" type="date" class="form-input"><x-input-error :messages="$errors->get('profileBirthDate')" /></label>
-                    <label><span class="form-label">هاتف التواصل</span><input wire:model="profileContactPhone" class="form-input" dir="ltr"><x-input-error :messages="$errors->get('profileContactPhone')" /></label>
-                    <label><span class="form-label">نوع الكفالة</span><input wire:model="profileSponsorshipType" class="form-input" placeholder="مثال: كفالة تعليمية"><x-input-error :messages="$errors->get('profileSponsorshipType')" /></label>
-                    <label><span class="form-label">جهة الكفالة</span><input wire:model="profileSponsorshipOrganization" class="form-input" placeholder="اسم الجهة إن وجدت"><x-input-error :messages="$errors->get('profileSponsorshipOrganization')" /></label>
+                    <label><span class="form-label">هاتف التواصل</span><input wire:model="profileContactPhone" type="tel" inputmode="tel" class="form-input" dir="ltr" placeholder="059 000 0000"><small class="mt-1 block text-xs font-medium text-emerald-700">اكتب رقمًا يدعم واتساب بصيغة محلية أو دولية.</small><x-input-error :messages="$errors->get('profileContactPhone')" /></label>
                     <label><span class="form-label">الحالة</span><select wire:model="profileStatus" class="form-input">@foreach($studentStatuses as $studentStatus)<option value="{{ $studentStatus->value }}">{{ $studentStatus->label() }}</option>@endforeach</select><x-input-error :messages="$errors->get('profileStatus')" /></label>
                     <label><span class="form-label">وثيقة هوية جديدة</span><input wire:model="profileIdentityDocument" type="file" accept=".pdf,image/*" class="form-input"><x-input-error :messages="$errors->get('profileIdentityDocument')" /></label>
                 </div>
@@ -162,8 +160,8 @@
                 <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <label><span class="form-label">الاسم الكامل</span><input wire:model="guardianName" class="form-input"><x-input-error :messages="$errors->get('guardianName')" /></label>
                     <label><span class="form-label">صلة القرابة</span><select wire:model="guardianRelationship" class="form-input">@foreach($relationships as $value => $label)<option value="{{ $value }}">{{ $label }}</option>@endforeach</select></label>
-                    <label><span class="form-label">الهاتف</span><input wire:model="guardianPhone" class="form-input" dir="ltr"><x-input-error :messages="$errors->get('guardianPhone')" /></label>
-                    <label><span class="form-label">هاتف بديل</span><input wire:model="guardianAlternativePhone" class="form-input" dir="ltr"></label>
+                    <label><span class="form-label">الهاتف</span><input wire:model="guardianPhone" type="tel" inputmode="tel" class="form-input" dir="ltr" placeholder="059 000 0000"><x-input-error :messages="$errors->get('guardianPhone')" /></label>
+                    <label><span class="form-label">هاتف بديل</span><input wire:model="guardianAlternativePhone" type="tel" inputmode="tel" class="form-input" dir="ltr" placeholder="059 000 0000"></label>
                 </div>
                 <details class="group rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
                     <summary class="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-black text-emerald-900"><span>بيانات إضافية اختيارية</span><svg class="size-4 transition group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></summary>
@@ -213,6 +211,12 @@
                 @forelse($student->guardians as $guardian)
                     <article class="rounded-2xl border border-slate-100 p-4" wire:key="guardian-{{ $guardian->id }}">
                         <div class="flex items-start justify-between gap-3"><div><p class="font-bold text-emerald-950">{{ $guardian->full_name }}</p><p class="mt-1 text-sm text-slate-500">{{ $relationships[$guardian->pivot->relationship] ?? $guardian->pivot->relationship }} · <span dir="ltr">{{ $guardian->phone }}</span></p></div>@if($guardian->pivot->is_primary)<span class="badge-active">أساسي</span>@endif</div>
+                        @can('update', $student)
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                <x-whatsapp-contact :phone="$guardian->phone" label="مراسلة ولي الأمر" />
+                                <x-whatsapp-contact :phone="$guardian->alternative_phone" label="مراسلة الرقم البديل" class="bg-emerald-100 text-emerald-900 hover:bg-emerald-200" />
+                            </div>
+                        @endcan
                         @if($canManagePrivateStudentData)<div class="mt-2 text-xs text-slate-500">الهوية: <span dir="ltr">{{ $guardian->identity_number ?? '—' }}</span>@if($guardian->identityDocument) · <a class="font-bold text-emerald-700" href="{{ route('private-files.show', $guardian->identityDocument) }}">الوثيقة</a>@endif</div>@endif
                         @can('update', $student)<button wire:click="editGuardian({{ $guardian->id }})" type="button" class="mt-3 inline-flex items-center gap-1.5 text-xs font-black text-emerald-700 transition hover:text-emerald-900"><svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 16-1 5 5-1L19 9l-4-4L4 16Z"/><path d="m13 7 4 4"/></svg>تعديل البيانات</button>@endcan
                     </article>
