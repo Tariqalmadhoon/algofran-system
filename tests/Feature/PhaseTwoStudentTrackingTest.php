@@ -498,6 +498,44 @@ class PhaseTwoStudentTrackingTest extends TestCase
             ->assertHasErrors(['recordDate']);
     }
 
+    public function test_assigned_teacher_can_archive_a_student_without_deleting_his_history(): void
+    {
+        $teacherUser = User::factory()->create();
+        $teacherUser->assignRole('teacher');
+        [$center, $branch, $halaqa] = $this->organization();
+        $teacher = TeacherProfile::query()->create([
+            'user_id' => $teacherUser->id,
+            'center_id' => $center->id,
+            'branch_id' => $branch->id,
+            'employee_number' => 'T-ARCHIVE',
+            'active' => true,
+        ]);
+        $halaqa->teacherAssignments()->create([
+            'teacher_profile_id' => $teacher->id,
+            'role' => 'primary',
+            'starts_at' => today()->subDay()->toDateString(),
+        ]);
+        $student = $this->createStudent($teacherUser, $halaqa, 'STU-ARCHIVE');
+
+        Livewire::actingAs($teacherUser)
+            ->test(StudentsIndex::class)
+            ->assertSee('أرشفة')
+            ->call('archiveStudent', $student->id)
+            ->assertHasNoErrors()
+            ->assertSee('تمت أرشفة الطالب وإنهاء إلحاقه الحالي مع الاحتفاظ بسجلاته كاملة.');
+
+        $student = $student->fresh();
+        $this->assertSame('archived', $student->status->value);
+        $this->assertNull($student->current_halaqa_id);
+        $this->assertNull($student->deleted_at);
+        $this->assertDatabaseHas('halaqa_enrollments', [
+            'student_id' => $student->id,
+            'halaqa_id' => $halaqa->id,
+            'ends_at' => today()->toDateString(),
+        ]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'student.archived', 'auditable_id' => $student->id]);
+    }
+
     public function test_whatsapp_contact_links_normalize_local_and_international_numbers(): void
     {
         $links = app(WhatsAppLinkService::class);

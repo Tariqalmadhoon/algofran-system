@@ -44,7 +44,7 @@
     <section class="panel space-y-5">
         <div class="grid gap-3 md:grid-cols-3">
             <label><span class="form-label">بحث</span><input wire:model.live.debounce.350ms="search" class="form-input" placeholder="الاسم، الرقم، الهوية أو الهاتف"></label>
-            <label><span class="form-label">الحالة</span><select wire:model.live="statusFilter" class="form-input"><option value="">كل الحالات</option>@foreach($statuses as $studentStatus)<option value="{{ $studentStatus->value }}">{{ $studentStatus->label() }}</option>@endforeach</select></label>
+            <label><span class="form-label">الحالة</span><select wire:model.live="statusFilter" class="form-input"><option value="">غير المؤرشفين</option>@foreach($statuses as $studentStatus)<option value="{{ $studentStatus->value }}">{{ $studentStatus->label() }}</option>@endforeach</select></label>
             <label><span class="form-label">الحلقة</span><select wire:model.live="halaqaFilter" class="form-input"><option value="">كل الحلقات</option>@foreach($halaqas as $halaqa)<option value="{{ $halaqa->id }}">{{ $halaqa->name }}</option>@endforeach</select></label>
         </div>
 
@@ -66,7 +66,16 @@
                                 </div>
                             </td>
                             <td><span class="{{ $student->status->value === 'active' ? 'badge-active' : 'badge-inactive' }}">{{ $student->status->label() }}</span></td>
-                            <td><a class="text-sm font-bold text-emerald-700 hover:text-emerald-900" href="{{ route('students.show', $student) }}">فتح الملف</a></td>
+                            <td>
+                                <div class="flex flex-wrap items-center gap-3">
+                                    <a class="text-sm font-bold text-emerald-700 hover:text-emerald-900" href="{{ route('students.show', $student) }}">فتح الملف</a>
+                                    @can('archive', $student)
+                                        @if($student->status->value !== 'archived')
+                                            <button type="button" class="text-xs font-black text-rose-600 transition hover:text-rose-800" @click="$dispatch('app:confirm', { title: 'أرشفة الطالب', message: 'سيُنهى إلحاق الطالب الحالي ويختفي من القائمة، مع الاحتفاظ بسجلات الحفظ والحضور والتاريخ كاملًا.', confirmLabel: 'أرشفة الطالب', tone: 'danger', action: () => $wire.archiveStudent({{ $student->id }}) })">أرشفة</button>
+                                        @endif
+                                    @endcan
+                                </div>
+                            </td>
                         </tr>
                     @empty
                         <tr><td colspan="6" class="py-10 text-center text-slate-400">لا توجد نتائج مطابقة.</td></tr>

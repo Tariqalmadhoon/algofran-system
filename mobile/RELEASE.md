@@ -38,18 +38,20 @@ directory.
 powershell -ExecutionPolicy Bypass -File scripts\build_release_apk.ps1 `
   -ApiBaseUrl https://example.org/api/v1 `
   -BuildName 1.3.0 `
-  -BuildNumber 4
+  -BuildNumber 5
 ```
 
-Upload both generated files to the server's configured public disk path, then
-set these production variables to matching values:
+Upload the three generated files (`.apk`, `.apk.sha256`, and `.apk.json`) to
+the server's private release directory (`storage/app/private/releases`). Never
+place the APK in `public/`. Then set these production variables to matching
+values:
 
 ```dotenv
-MOBILE_APP_VERSION=1.3.0
+MOBILE_APP_VERSION=1.3.1
 MOBILE_APP_RELEASE_ENABLED=true
-MOBILE_APP_VERSION_CODE=4
+MOBILE_APP_VERSION_CODE=5
 MOBILE_APP_MINIMUM_VERSION_CODE=1
-MOBILE_ANDROID_APK_PATH=downloads/gofran-mobile-1.3.0.apk
+MOBILE_ANDROID_APK_PATH=releases/gofran-mobile-1.3.1-5.apk
 MOBILE_APP_RELEASE_NOTES="Release notes shown inside the app"
 MOBILE_APP_PUBLISHED_AT=2026-09-09T00:00:00+03:00
 ```
