@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\PasswordConfirmationController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\TwoFactorChallengeController;
 use App\Http\Controllers\MobileDistributionController;
+use App\Http\Controllers\MobileReleaseChunkUploadController;
 use App\Http\Controllers\PrivateFileController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicSiteController;
@@ -111,6 +112,9 @@ Route::middleware(['auth', EnsureUserIsActive::class, 'auth.session', EnsureStro
     Route::get('/mobile-distribution', MobileDistributionController::class)
         ->middleware(EnsureSuperAdministrator::class)
         ->name('mobile.distribution');
+    Route::post('/mobile-distribution/apk-chunks', MobileReleaseChunkUploadController::class)
+        ->middleware(['throttle:mobile-release-upload', EnsureSuperAdministrator::class])
+        ->name('mobile.distribution.apk-chunks');
 
     Route::get('/private-files/{privateFile}', [PrivateFileController::class, 'show'])
         ->name('private-files.show');
