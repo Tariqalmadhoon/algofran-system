@@ -55,6 +55,7 @@ class AppServiceProvider extends ServiceProvider
         });
 
         RateLimiter::for('api', fn (Request $request) => Limit::perMinute(60)->by($request->user()?->id ?: $request->ip()));
+        RateLimiter::for('mobile-release-upload', fn (Request $request) => Limit::perMinute(90)->by($request->user()?->id ?: $request->ip()));
 
         DB::whenQueryingForLongerThan((int) config('system.monitoring.query_budget_ms', 750), function (Connection $connection, QueryExecuted $event): void {
             Log::warning('Database query budget exceeded.', [

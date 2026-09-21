@@ -3,8 +3,10 @@
 namespace App\Livewire;
 
 use App\Actions\Mobile\PublishAndroidReleaseAction;
+use App\Actions\Mobile\StageAndroidReleaseUploadAction;
 use App\Services\AndroidReleaseService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Validator;
 use Livewire\Component;
 use Livewire\Features\SupportFileUploads\WithFileUploads;
 
@@ -20,7 +22,7 @@ class MobileDistributionManager extends Component
 
     public string $releaseNotes = '';
 
-    public $apk;
+    public string $apkUploadToken = '';
 
     public $checksum;
 
@@ -38,7 +40,7 @@ class MobileDistributionManager extends Component
         $this->minimumVersionCode = (string) ($current['minimum_version_code'] ?? 1);
     }
 
-    public function publish(PublishAndroidReleaseAction $publisher): void
+    public function publish(PublishAndroidReleaseAction $publisher, StageAndroidReleaseUploadAction $uploads): void
     {
         abort_unless(auth()->user()?->hasRole('super-admin'), 403);
 
@@ -48,19 +50,23 @@ class MobileDistributionManager extends Component
             'versionCode' => ['required', 'integer', 'min:1'],
             'minimumVersionCode' => ['required', 'integer', 'min:1', 'lte:versionCode'],
             'releaseNotes' => ['nullable', 'string', 'max:2000'],
-            'apk' => ['required', 'file', 'extensions:apk', "max:{$maxSize}"],
+            'apkUploadToken' => ['required', 'uuid'],
             'checksum' => ['required', 'file', 'extensions:sha256,txt', 'max:16'],
             'manifest' => ['required', 'file', 'extensions:json', 'max:128'],
         ]);
+
+        $apk = $uploads->uploadedFile(auth()->user(), $data['apkUploadToken']);
+        Validator::validate(['apk' => $apk], ['apk' => ['required', 'file', 'extensions:apk', "max:{$maxSize}"]]);
 
         $release = $publisher->execute(auth()->user(), [
             'version' => $data['version'],
             'version_code' => (int) $data['versionCode'],
             'minimum_version_code' => (int) $data['minimumVersionCode'],
             'release_notes' => $data['releaseNotes'] ?: null,
-        ], $data['apk'], $data['checksum'], $data['manifest']);
+        ], $apk, $data['checksum'], $data['manifest']);
 
-        $this->reset(['apk', 'checksum', 'manifest', 'releaseNotes']);
+        $uploads->discard(auth()->user(), $data['apkUploadToken']);
+        $this->reset(['apkUploadToken', 'checksum', 'manifest', 'releaseNotes']);
         $this->version = $release['version_name'];
         $this->versionCode = (string) ($release['version_code'] + 1);
         $this->minimumVersionCode = (string) $release['minimum_version_code'];
