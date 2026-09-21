@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Actions\Students\ArchiveStudentAction;
 use App\Actions\Students\CreateStudentAction;
 use App\Enums\StudentStatus;
 use App\Models\Halaqa;
@@ -136,6 +137,22 @@ class StudentsIndex extends Component
         session()->flash('success', 'تم إنشاء ملف الطالب بنجاح.');
     }
 
+    public function archiveStudent(int $studentId, ArchiveStudentAction $archiveStudent): void
+    {
+        $student = Student::query()->findOrFail($studentId);
+        Gate::authorize('archive', $student);
+
+        if ($student->status === StudentStatus::Archived) {
+            session()->flash('info', 'ملف الطالب موجود بالفعل في الأرشيف.');
+
+            return;
+        }
+
+        $archiveStudent->execute($student, auth()->user());
+        $this->resetPage();
+        session()->flash('success', 'تمت أرشفة الطالب وإنهاء إلحاقه الحالي مع الاحتفاظ بسجلاته كاملة.');
+    }
+
     public function render(StudentVisibilityService $visibility): View
     {
         $students = $visibility->queryFor(auth()->user())
@@ -149,7 +166,11 @@ class StudentsIndex extends Component
                         ->orWhere('contact_phone', 'like', $term);
                 });
             })
-            ->when($this->statusFilter, fn ($query) => $query->where('status', $this->statusFilter))
+            ->when(
+                $this->statusFilter,
+                fn ($query) => $query->where('status', $this->statusFilter),
+                fn ($query) => $query->where('status', '!=', StudentStatus::Archived->value),
+            )
             ->when($this->halaqaFilter, fn ($query) => $query->where('current_halaqa_id', $this->halaqaFilter))
             ->orderBy('full_name')
             ->paginate(15);
