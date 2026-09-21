@@ -79,6 +79,7 @@ Route::middleware(['auth', EnsureUserIsActive::class, 'auth.session', EnsureStro
         ->name('access.index');
 
     Route::get('/students', [StudentController::class, 'index'])->name('students.index');
+    Route::get('/students/trash', [StudentController::class, 'trash'])->name('students.trash');
     Route::get('/students/{student}', [StudentController::class, 'show'])->name('students.show');
     Route::get('/teacher/daily', TeacherDailyController::class)->name('teacher.daily');
     Route::get('/teacher/mobile-app', TeacherMobileAppController::class)

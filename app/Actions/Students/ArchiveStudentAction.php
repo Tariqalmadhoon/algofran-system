@@ -28,10 +28,13 @@ class ArchiveStudentAction
 
             $archived = $this->updateStudent->execute($student, [
                 'status' => StudentStatus::Archived->value,
+                'pre_archive_status' => $student->status->value,
                 'current_halaqa_id' => null,
             ], $actor);
 
             $this->audit->record('student.archived', $archived, $old, $archived->getAttributes());
+
+            $archived->delete();
 
             return $archived;
         });

@@ -18,7 +18,7 @@ class Student extends Model
     protected $fillable = [
         'user_id', 'student_number', 'first_name', 'father_name', 'grandfather_name', 'family_name', 'full_name',
         'identity_number', 'birth_date', 'contact_phone', 'sponsorship_type', 'sponsorship_organization',
-        'registration_date', 'status', 'current_halaqa_id',
+        'registration_date', 'status', 'pre_archive_status', 'current_halaqa_id',
         'photo_private_file_id', 'identity_private_file_id', 'notes', 'created_by', 'updated_by',
     ];
 

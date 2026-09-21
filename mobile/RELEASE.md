@@ -41,10 +41,16 @@ powershell -ExecutionPolicy Bypass -File scripts\build_release_apk.ps1 `
   -BuildNumber 5
 ```
 
-Upload the three generated files (`.apk`, `.apk.sha256`, and `.apk.json`) to
-the server's private release directory (`storage/app/private/releases`). Never
-place the APK in `public/`. Then set these production variables to matching
-values:
+After the website is deployed, sign in as the super administrator and open
+`/mobile-distribution`. Upload the three generated files (`.apk`, `.apk.sha256`,
+and `.apk.json`) together, enter the matching version/build values, and publish.
+The system validates the signature metadata, checksum, size, HTTPS API URL, and
+version before placing the package in private storage. It never exposes the APK
+from `public/`.
+
+The environment values below are safe fallback values for the first release or
+an operational recovery. Once an administrator publishes through the dashboard,
+the active release metadata is stored in the database and takes precedence:
 
 ```dotenv
 MOBILE_APP_VERSION=1.3.1
@@ -54,6 +60,7 @@ MOBILE_APP_MINIMUM_VERSION_CODE=1
 MOBILE_ANDROID_APK_PATH=releases/gofran-mobile-1.3.1-5.apk
 MOBILE_APP_RELEASE_NOTES="Release notes shown inside the app"
 MOBILE_APP_PUBLISHED_AT=2026-09-09T00:00:00+03:00
+MOBILE_APP_UPLOAD_MAX_KILOBYTES=131072
 ```
 
 Keep `MOBILE_APP_MINIMUM_VERSION_CODE` low for an optional update. Raise it only

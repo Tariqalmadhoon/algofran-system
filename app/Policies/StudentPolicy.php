@@ -49,6 +49,21 @@ class StudentPolicy
         return $user->can('students.archive') && ! $user->requiresTeacherAssignmentScope();
     }
 
+    public function viewTrash(User $user): bool
+    {
+        return $user->can('students.archive') && ! $user->requiresTeacherAssignmentScope();
+    }
+
+    public function restore(User $user, Student $student): bool
+    {
+        return $this->viewTrash($user);
+    }
+
+    public function forceDelete(User $user, Student $student): bool
+    {
+        return $user->hasRole('super-admin');
+    }
+
     public function archive(User $user, Student $student): bool
     {
         return $user->can('students.archive')

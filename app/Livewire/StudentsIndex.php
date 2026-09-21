@@ -142,15 +142,9 @@ class StudentsIndex extends Component
         $student = Student::query()->findOrFail($studentId);
         Gate::authorize('archive', $student);
 
-        if ($student->status === StudentStatus::Archived) {
-            session()->flash('info', 'ملف الطالب موجود بالفعل في الأرشيف.');
-
-            return;
-        }
-
         $archiveStudent->execute($student, auth()->user());
         $this->resetPage();
-        session()->flash('success', 'تمت أرشفة الطالب وإنهاء إلحاقه الحالي مع الاحتفاظ بسجلاته كاملة.');
+        session()->flash('success', 'نُقل ملف الطالب إلى سلة المهملات مع الاحتفاظ بسجلاته كاملة.');
     }
 
     public function render(StudentVisibilityService $visibility): View
@@ -166,11 +160,7 @@ class StudentsIndex extends Component
                         ->orWhere('contact_phone', 'like', $term);
                 });
             })
-            ->when(
-                $this->statusFilter,
-                fn ($query) => $query->where('status', $this->statusFilter),
-                fn ($query) => $query->where('status', '!=', StudentStatus::Archived->value),
-            )
+            ->when($this->statusFilter, fn ($query) => $query->where('status', $this->statusFilter))
             ->when($this->halaqaFilter, fn ($query) => $query->where('current_halaqa_id', $this->halaqaFilter))
             ->orderBy('full_name')
             ->paginate(15);
@@ -178,7 +168,9 @@ class StudentsIndex extends Component
         return view('livewire.students-index', [
             'students' => $students,
             'halaqas' => $this->availableHalaqas()->orderBy('name')->get(['id', 'name']),
-            'statuses' => StudentStatus::cases(),
+            'statuses' => collect(StudentStatus::cases())
+                ->reject(fn (StudentStatus $status) => $status === StudentStatus::Archived)
+                ->all(),
             'teacherMode' => auth()->user()->requiresTeacherAssignmentScope(),
         ]);
     }
