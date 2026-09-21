@@ -42,10 +42,6 @@ class StudentsIndex extends Component
 
     public string $contactPhone = '';
 
-    public string $sponsorshipType = '';
-
-    public string $sponsorshipOrganization = '';
-
     public string $registrationDate = '';
 
     public string $status = 'active';
@@ -94,8 +90,6 @@ class StudentsIndex extends Component
             'identityNumber' => ['nullable', 'string', 'max:50', 'unique:students,identity_number'],
             'birthDate' => ['nullable', 'date', 'before:today'],
             'contactPhone' => ['nullable', 'string', 'max:30'],
-            'sponsorshipType' => ['nullable', 'string', 'max:255'],
-            'sponsorshipOrganization' => ['nullable', 'string', 'max:255'],
             'registrationDate' => ['required', 'date'],
             'status' => ['required', Rule::enum(StudentStatus::class)],
             'halaqaId' => [$teacherMode ? 'required' : 'nullable', 'exists:halaqas,id'],
@@ -119,8 +113,6 @@ class StudentsIndex extends Component
             'identity_number' => $data['identityNumber'] ?: null,
             'birth_date' => $data['birthDate'] ?: null,
             'contact_phone' => $data['contactPhone'] ?: null,
-            'sponsorship_type' => $data['sponsorshipType'] ?: null,
-            'sponsorship_organization' => $data['sponsorshipOrganization'] ?: null,
             'registration_date' => $data['registrationDate'],
             'status' => $data['status'],
             'halaqa_id' => $data['halaqaId'] ?: null,
@@ -174,7 +166,7 @@ class StudentsIndex extends Component
     {
         $this->reset(
             'studentNumber', 'firstName', 'fatherName', 'grandfatherName', 'familyName', 'identityNumber',
-            'birthDate', 'contactPhone', 'sponsorshipType', 'sponsorshipOrganization', 'status', 'halaqaId', 'notes', 'photo', 'identityDocument',
+            'birthDate', 'contactPhone', 'status', 'halaqaId', 'notes', 'photo', 'identityDocument',
         );
         $this->status = StudentStatus::Active->value;
         $this->registrationDate = today()->toDateString();

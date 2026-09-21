@@ -44,10 +44,6 @@ class StudentProfile extends Component
 
     public string $profileContactPhone = '';
 
-    public string $profileSponsorshipType = '';
-
-    public string $profileSponsorshipOrganization = '';
-
     public string $profileStatus = 'active';
 
     public string $profileNotes = '';
@@ -109,8 +105,6 @@ class StudentProfile extends Component
         $this->profileIdentityNumber = $student->identity_number ?? '';
         $this->profileBirthDate = $student->birth_date?->toDateString() ?? '';
         $this->profileContactPhone = $student->contact_phone ?? '';
-        $this->profileSponsorshipType = $student->sponsorship_type ?? '';
-        $this->profileSponsorshipOrganization = $student->sponsorship_organization ?? '';
         $this->profileStatus = $student->status->value;
         $this->profileNotes = $student->notes ?? '';
         $this->baselineRecordedAt = today()->toDateString();
@@ -182,8 +176,6 @@ class StudentProfile extends Component
             'profileIdentityNumber' => ['nullable', 'string', 'max:50', Rule::unique('students', 'identity_number')->ignore($student->id)],
             'profileBirthDate' => ['nullable', 'date', 'before:today'],
             'profileContactPhone' => ['nullable', 'string', 'max:30'],
-            'profileSponsorshipType' => ['nullable', 'string', 'max:255'],
-            'profileSponsorshipOrganization' => ['nullable', 'string', 'max:255'],
             'profileStatus' => ['required', Rule::enum(StudentStatus::class)],
             'profileNotes' => ['nullable', 'string', 'max:3000'],
             'profilePhoto' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:3072'],
@@ -199,8 +191,6 @@ class StudentProfile extends Component
             'identity_number' => $data['profileIdentityNumber'] ?: null,
             'birth_date' => $data['profileBirthDate'] ?: null,
             'contact_phone' => $data['profileContactPhone'] ?: null,
-            'sponsorship_type' => $data['profileSponsorshipType'] ?: null,
-            'sponsorship_organization' => $data['profileSponsorshipOrganization'] ?: null,
             'status' => $data['profileStatus'],
             'notes' => $data['profileNotes'] ?: null,
         ];
