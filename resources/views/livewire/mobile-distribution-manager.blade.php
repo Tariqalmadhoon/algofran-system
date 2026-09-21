@@ -60,19 +60,51 @@
             <h2 class="section-title mt-1">ارفع الحزمة الموثّقة</h2>
             <p class="mt-2 text-sm leading-7 text-slate-600">الحد الأعلى للحزمة {{ $maxUploadMegabytes }} MB. يجب أن تتطابق بيانات JSON والبصمة مع ملف APK، وإلا لن يُنشر الإصدار.</p>
         </div>
-        <form wire:submit="publish" class="mt-6 space-y-5" enctype="multipart/form-data">
+        <form
+            wire:submit="publish"
+            class="mt-6 space-y-5"
+            enctype="multipart/form-data"
+            x-data="{
+                apkUploading: false,
+                apkFailed: false,
+                apkProgress: 0,
+                apkSize: 0,
+                isApkUpload(event) { return event.detail.property === 'apk' },
+                selectApk(event) {
+                    const file = event.target.files.length ? event.target.files[0] : null;
+                    this.apkSize = file ? file.size : 0;
+                    this.apkFailed = false;
+                    this.apkProgress = 0;
+                },
+                sizeLabel() { return this.apkSize ? (this.apkSize / 1024 / 1024).toFixed(1) + ' MB' : '' }
+            }"
+            x-on:livewire-upload-start="if (isApkUpload($event)) { apkUploading = true; apkFailed = false; apkProgress = 0 }"
+            x-on:livewire-upload-progress="if (isApkUpload($event)) apkProgress = $event.detail.progress"
+            x-on:livewire-upload-finish="if (isApkUpload($event)) { apkUploading = false; apkProgress = 100 }"
+            x-on:livewire-upload-error="if (isApkUpload($event)) { apkUploading = false; apkFailed = true }"
+        >
             <div class="grid gap-4 md:grid-cols-3">
                 <label><span class="form-label">رقم الإصدار</span><input wire:model="version" class="form-input" dir="ltr" placeholder="1.3.2"><small class="mt-1 block text-xs text-slate-500">صيغة: 1.3.2</small><x-input-error :messages="$errors->get('version')" /></label>
                 <label><span class="form-label">رقم البناء</span><input wire:model="versionCode" type="number" min="1" class="form-input" dir="ltr"><x-input-error :messages="$errors->get('versionCode')" /></label>
                 <label><span class="form-label">أقل بناء مدعوم</span><input wire:model="minimumVersionCode" type="number" min="1" class="form-input" dir="ltr"><x-input-error :messages="$errors->get('minimumVersionCode')" /></label>
             </div>
             <div class="grid gap-4 md:grid-cols-3">
-                <label><span class="form-label">ملف التطبيق APK</span><input wire:model="apk" type="file" accept=".apk,application/vnd.android.package-archive" class="form-input"><small wire:loading wire:target="apk" class="mt-1 block text-xs font-bold text-emerald-700">يجري رفع APK…</small><x-input-error :messages="$errors->get('apk')" /></label>
+                <label>
+                    <span class="form-label">ملف التطبيق APK</span>
+                    <input wire:model="apk" x-on:change="selectApk($event)" type="file" accept=".apk,application/vnd.android.package-archive" class="form-input">
+                    <div x-cloak x-show="apkUploading" class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3" role="status" aria-live="polite">
+                        <div class="flex items-center justify-between gap-3 text-xs font-black text-emerald-900"><span>يجري رفع APK</span><span dir="ltr" x-text="apkProgress + '%'"></span></div>
+                        <div class="mt-2 h-2 overflow-hidden rounded-full bg-emerald-100"><div class="h-full rounded-full bg-gradient-to-l from-emerald-500 to-teal-400 transition-[width] duration-200" :style="'width: ' + apkProgress + '%'" role="progressbar" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="apkProgress"></div></div>
+                        <p class="mt-2 text-xs text-emerald-800/80"><span x-text="sizeLabel()"></span><span x-show="apkProgress < 100"> · لا تغلق الصفحة حتى يصل العداد إلى 100%.</span></p>
+                    </div>
+                    <div x-cloak x-show="apkFailed" class="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs leading-6 text-rose-800" role="alert">تعذّر نقل APK إلى الخادم. إذا فشل قبل 100% فراجع حدّ رفع PHP في Hostinger: <span dir="ltr" class="font-bold">upload_max_filesize=128M</span> و<span dir="ltr" class="font-bold">post_max_size=140M</span>، ثم أعد المحاولة.</div>
+                    <x-input-error :messages="$errors->get('apk')" />
+                </label>
                 <label><span class="form-label">ملف البصمة SHA-256</span><input wire:model="checksum" type="file" accept=".sha256,text/plain" class="form-input"><x-input-error :messages="$errors->get('checksum')" /></label>
                 <label><span class="form-label">ملف بيانات الإصدار JSON</span><input wire:model="manifest" type="file" accept="application/json,.json" class="form-input"><x-input-error :messages="$errors->get('manifest')" /></label>
             </div>
             <label class="block"><span class="form-label">ملاحظات التحديث للمحفظين</span><textarea wire:model="releaseNotes" rows="3" class="form-input" placeholder="تحسينات المزامنة وسهولة تسجيل الحفظ."></textarea><x-input-error :messages="$errors->get('releaseNotes')" /></label>
-            <button type="submit" class="btn-primary" wire:loading.attr="disabled" wire:target="publish,apk,checksum,manifest"><span wire:loading.remove wire:target="publish">تحقق وانشر الإصدار</span><span wire:loading wire:target="publish">يجري التحقق والنشر…</span></button>
+            <button type="submit" class="btn-primary" wire:loading.attr="disabled" wire:target="publish,apk,checksum,manifest" x-bind:disabled="apkUploading"><span wire:loading.remove wire:target="publish">تحقق وانشر الإصدار</span><span wire:loading wire:target="publish">يجري التحقق والنشر…</span></button>
         </form>
     </section>
 </div>

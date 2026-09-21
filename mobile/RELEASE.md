@@ -48,6 +48,11 @@ The system validates the signature metadata, checksum, size, HTTPS API URL, and
 version before placing the package in private storage. It never exposes the APK
 from `public/`.
 
+For the current 63 MB Android package, configure the production PHP profile
+before opening the publisher: `upload_max_filesize=128M`, `post_max_size=140M`,
+`max_execution_time=300`, and `max_input_time=300`. The dashboard shows a live
+percentage while the APK is being transferred.
+
 The environment values below are safe fallback values for the first release or
 an operational recovery. Once an administrator publishes through the dashboard,
 the active release metadata is stored in the database and takes precedence:
