@@ -26,6 +26,7 @@ class MobileDistributionDashboardTest extends TestCase
             ->get(route('mobile.distribution'))
             ->assertOk()
             ->assertSee('توزيع تطبيق المحفّظ')
+            ->assertSee('يجري رفع APK')
             ->assertSee(route('teacher.mobile.app'), false)
             ->assertSee('لا يوجد إصدار منشور بعد');
     }
