@@ -11,7 +11,9 @@ use RuntimeException;
 
 class StageAndroidReleaseUploadAction
 {
-    public const CHUNK_BYTES = 4 * 1024 * 1024;
+    public const CHUNK_BYTES = 1024 * 1024;
+
+    public const MAX_CHUNKS = 512;
 
     public const MAX_BYTES = 512 * 1024 * 1024;
 
@@ -30,7 +32,7 @@ class StageAndroidReleaseUploadAction
         $total = (int) $data['total'];
         $totalSize = (int) $data['total_size'];
 
-        if ($index < 0 || $total < 1 || $index >= $total || $total > 128 || $totalSize < 1 || $totalSize > self::MAX_BYTES) {
+        if ($index < 0 || $total < 1 || $index >= $total || $total > self::MAX_CHUNKS || $totalSize < 1 || $totalSize > self::MAX_BYTES) {
             throw ValidationException::withMessages(['chunk' => 'بيانات تقسيم ملف APK غير صالحة.']);
         }
 

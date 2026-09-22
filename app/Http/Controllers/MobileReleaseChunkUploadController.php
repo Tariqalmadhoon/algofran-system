@@ -15,7 +15,7 @@ class MobileReleaseChunkUploadController extends Controller
         $data = $request->validate([
             'upload_id' => ['required', 'uuid'],
             'index' => ['required', 'integer', 'min:0'],
-            'total' => ['required', 'integer', 'min:1', 'max:128'],
+            'total' => ['required', 'integer', 'min:1', 'max:'.StageAndroidReleaseUploadAction::MAX_CHUNKS],
             'total_size' => ['required', 'integer', 'min:1', 'max:'.StageAndroidReleaseUploadAction::MAX_BYTES],
             'chunk' => ['required', 'file', 'max:'.(int) ceil(StageAndroidReleaseUploadAction::CHUNK_BYTES / 1024)],
         ]);
