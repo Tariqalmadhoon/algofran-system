@@ -71,7 +71,7 @@
                 apkProgress: 0,
                 apkSize: 0,
                 apkStageError: '',
-                chunkSize: 4 * 1024 * 1024,
+                chunkSize: 1024 * 1024,
                 uploadUrl: @js(route('mobile.distribution.apk-chunks')),
                 async selectApk(event) {
                     const file = event.target.files.length ? event.target.files[0] : null;
@@ -97,7 +97,7 @@
                     try {
                         for (let index = 0; index < total; index++) {
                             const start = index * this.chunkSize;
-                            const chunk = file.slice(start, Math.min(file.size, start + this.chunkSize));
+                            const chunk = file.slice(start, Math.min(file.size, start + this.chunkSize), 'application/octet-stream');
                             const response = await this.sendChunk(file, chunk, uploadId, index, total);
 
                             this.apkProgress = Math.round(((index + 1) / total) * 100);
@@ -124,10 +124,10 @@
                         data.append('index', index);
                         data.append('total', total);
                         data.append('total_size', file.size);
-                        data.append('chunk', chunk, file.name);
+                        data.append('chunk', chunk, `release-part-${index + 1}.bin`);
 
                         request.open('POST', this.uploadUrl, true);
-                        request.timeout = 90000;
+                        request.timeout = 180000;
                         request.setRequestHeader('Accept', 'application/json');
                         request.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
                         const csrf = document.querySelector('meta[name=csrf-token]')?.getAttribute('content');

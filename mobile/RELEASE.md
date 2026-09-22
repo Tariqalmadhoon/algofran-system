@@ -52,7 +52,7 @@ For the current 63 MB Android package, configure the production PHP profile
 before opening the publisher: `upload_max_filesize=128M`, `post_max_size=140M`,
 `max_execution_time=300`, and `max_input_time=300`. The dashboard shows a live
 percentage while the APK is being transferred. The publisher sends the APK in
-authenticated 4 MB parts, so a shared-hosting proxy does not need to keep one
+authenticated 1 MB parts, so a shared-hosting proxy does not need to keep one
 large request open for the entire package.
 
 The environment values below are safe fallback values for the first release or
