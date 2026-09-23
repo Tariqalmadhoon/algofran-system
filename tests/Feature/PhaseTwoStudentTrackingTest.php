@@ -611,6 +611,7 @@ class PhaseTwoStudentTrackingTest extends TestCase
 
     public function test_excused_absence_disables_recitation_and_saves_attendance_without_evaluation(): void
     {
+        $this->seed(QuranReferenceSeeder::class);
         $teacherUser = User::factory()->create();
         $teacherUser->assignRole('teacher');
         [$center, $branch, $halaqa] = $this->organization();
