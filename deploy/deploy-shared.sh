@@ -101,6 +101,7 @@ else
 fi
 php artisan config:clear
 php artisan migrate --force
+php artisan db:seed --class=Database\\Seeders\\QuranReferenceSeeder --force
 php artisan optimize
 
 # Publish web assets without deleting uploads or previous hashed chunks still

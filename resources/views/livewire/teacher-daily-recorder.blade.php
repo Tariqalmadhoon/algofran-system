@@ -365,6 +365,17 @@
 
             @if(! $isAbsence)
                 <section class="space-y-4">
+                    @if(! $quranReferenceReady)
+                        <div class="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-amber-950" role="alert">
+                            <div class="flex items-start gap-3">
+                                <span class="grid size-10 shrink-0 place-items-center rounded-2xl bg-amber-100 text-lg font-black text-amber-800">!</span>
+                                <div>
+                                    <h2 class="font-black">مرجع السور والآيات غير مهيّأ</h2>
+                                    <p class="mt-1 text-sm leading-6 text-amber-800">لا يمكن تسجيل تسميع قبل تحميل بيانات القرآن المرجعية. تظهر هذه الرسالة بدل قوائم فارغة حتى لا يُحفظ أي نطاق غير صحيح. ما زال بإمكانك حفظ الحضور فقط.</p>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
                     <div class="panel">
                         <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                             <div><p class="eyebrow">بنود الجلسة</p><h2 class="section-title">ماذا سمّع الطالب؟</h2><p class="page-subtitle">الحفظ الجديد مفعّل تلقائيًا. أضف المراجعة أو الاختبار عند الحاجة.</p></div>
@@ -373,7 +384,7 @@
                         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                             @foreach($items as $index => $item)
                                 @php $type = $recitationTypes->get($item['type']); @endphp
-                                <button wire:click="toggleItem({{ $index }})" type="button" class="flex items-center gap-3 rounded-2xl border p-3 text-right transition {{ $item['enabled'] ? 'border-emerald-500 bg-emerald-50 text-emerald-950 ring-2 ring-emerald-500/10' : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-200' }}">
+                                <button wire:click="toggleItem({{ $index }})" type="button" @disabled(! $quranReferenceReady) class="flex items-center gap-3 rounded-2xl border p-3 text-right transition disabled:cursor-not-allowed disabled:opacity-55 {{ $item['enabled'] ? 'border-emerald-500 bg-emerald-50 text-emerald-950 ring-2 ring-emerald-500/10' : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-200' }}">
                                     <span class="grid size-9 shrink-0 place-items-center rounded-xl text-lg font-black {{ $item['enabled'] ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-400' }}">{{ $item['enabled'] ? '✓' : '+' }}</span>
                                     <span><strong class="block text-sm">{{ $type?->label() }}</strong><span class="mt-0.5 block text-[11px] leading-5 text-slate-500">{{ $typeDescriptions[$item['type']] }}</span></span>
                                 </button>

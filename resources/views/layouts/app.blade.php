@@ -80,7 +80,6 @@
         <div x-cloak x-show="sidebarOpen" x-transition.opacity class="fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-sm lg:hidden" @click="sidebarOpen = false"></div>
 
         <aside
-            x-cloak
             id="app-sidebar"
             :inert="!isDesktop && !sidebarOpen"
             :class="sidebarOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'"
