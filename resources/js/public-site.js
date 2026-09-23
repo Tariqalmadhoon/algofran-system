@@ -2,6 +2,7 @@ import './app';
 import '../css/public-site.css';
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)');
 
 const initializePublicNavigation = () => {
     const root = document.querySelector('[data-public-navigation]');
@@ -106,10 +107,52 @@ const initializeCounters = () => {
     counters.forEach((element) => observer.observe(element));
 };
 
+const initializeHeroDepth = () => {
+    if (reducedMotion.matches || !finePointer.matches || !('PointerEvent' in window)) return;
+
+    document.querySelectorAll('[data-public-tilt]').forEach((card) => {
+        if (card.dataset.tiltReady === 'true') return;
+
+        card.dataset.tiltReady = 'true';
+        let frame;
+        let nextX = 0;
+        let nextY = 0;
+
+        const render = () => {
+            frame = undefined;
+            card.style.setProperty('--public-tilt-x', `${nextX.toFixed(2)}deg`);
+            card.style.setProperty('--public-tilt-y', `${nextY.toFixed(2)}deg`);
+        };
+
+        const schedule = () => {
+            if (!frame) frame = window.requestAnimationFrame(render);
+        };
+
+        card.addEventListener('pointermove', (event) => {
+            const bounds = card.getBoundingClientRect();
+            const horizontal = ((event.clientX - bounds.left) / bounds.width) - .5;
+            const vertical = ((event.clientY - bounds.top) / bounds.height) - .5;
+
+            nextX = vertical * -3;
+            nextY = horizontal * 3;
+            card.classList.add('is-tilting');
+            schedule();
+        }, { passive: true });
+
+        card.addEventListener('pointerleave', () => {
+            nextX = 0;
+            nextY = 0;
+            card.classList.remove('is-tilting');
+            schedule();
+        });
+    });
+};
+
 
 const initializePublicSite = () => {
     initializePublicNavigation();
     initializeCounters();
+    initializeHeroDepth();
 };
 
 if (document.readyState === 'loading') {
