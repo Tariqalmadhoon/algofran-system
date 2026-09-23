@@ -3,6 +3,8 @@
         <div aria-hidden="true" class="public-hero-grid-pattern absolute inset-0 opacity-[.035]" style="background-image:linear-gradient(#065f46 1px,transparent 1px),linear-gradient(90deg,#065f46 1px,transparent 1px);background-size:52px 52px"></div>
         <div aria-hidden="true" class="absolute -right-40 -top-52 size-[34rem] rounded-full border-[90px] border-emerald-800/[.045]"></div>
         <div aria-hidden="true" class="absolute -bottom-48 left-[12%] size-[30rem] rounded-full bg-amber-200/25 blur-3xl"></div>
+        <span aria-hidden="true" class="public-hero-orb public-hero-orb--emerald"></span>
+        <span aria-hidden="true" class="public-hero-orb public-hero-orb--amber"></span>
 
         <div data-reveal-group="up" data-reveal-stagger="90" class="relative mx-auto grid min-h-[720px] max-w-7xl items-center gap-14 px-4 py-16 sm:px-6 lg:grid-cols-[1.02fr_.98fr] lg:px-8 lg:py-20">
             <div class="text-center lg:text-right">
@@ -37,7 +39,7 @@
 
             <div class="relative mx-auto w-full max-w-[34rem] px-3 py-8 sm:px-8">
                 <div aria-hidden="true" class="absolute inset-x-8 top-1/2 h-[70%] -translate-y-1/2 rounded-[4rem] bg-emerald-700/10 blur-2xl"></div>
-                <div class="public-hero-card relative overflow-hidden rounded-[2.75rem] border border-white/15 bg-[linear-gradient(145deg,#0b5b43_0%,#063b31_62%,#052d27_100%)] p-6 text-white shadow-[0_45px_100px_-40px_rgba(3,52,42,.8)] sm:p-8">
+                <div data-public-tilt class="public-hero-card relative overflow-hidden rounded-[2.75rem] border border-white/15 bg-[linear-gradient(145deg,#0b5b43_0%,#063b31_62%,#052d27_100%)] p-6 text-white shadow-[0_45px_100px_-40px_rgba(3,52,42,.8)] sm:p-8">
                     <div aria-hidden="true" class="absolute inset-0 opacity-[.12]" style="background-image:radial-gradient(circle,#fff 1px,transparent 1.5px);background-size:26px 26px"></div>
                     <div aria-hidden="true" class="absolute -left-24 -top-24 size-64 rounded-full border-[50px] border-emerald-200/10"></div>
 

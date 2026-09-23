@@ -133,13 +133,52 @@ body.public-site {
     min-height: min(840px, calc(100svh - var(--public-header-height)));
 }
 
+.public-hero-orb {
+    position: absolute;
+    z-index: 0;
+    display: block;
+    border-radius: 999px;
+    pointer-events: none;
+    filter: blur(1px);
+    will-change: transform;
+}
+
+.public-hero-orb--emerald {
+    top: 20%;
+    right: 8%;
+    width: 7rem;
+    height: 7rem;
+    border: 1px solid rgb(16 185 129 / .2);
+    box-shadow: 0 0 0 1rem rgb(16 185 129 / .035), 0 0 0 2.4rem rgb(16 185 129 / .018);
+    animation: public-orb-drift 11s ease-in-out infinite;
+}
+
+.public-hero-orb--amber {
+    bottom: 15%;
+    left: 8%;
+    width: 4.75rem;
+    height: 4.75rem;
+    border: 1px solid rgb(212 168 66 / .3);
+    box-shadow: 0 0 0 .7rem rgb(212 168 66 / .045);
+    animation: public-orb-drift 13s -4s ease-in-out infinite reverse;
+}
+
 .public-hero-grid-pattern {
     mask-image: linear-gradient(to bottom, #000 20%, transparent 92%);
 }
 
 .public-hero-card {
+    --public-tilt-x: 0deg;
+    --public-tilt-y: 0deg;
+    --public-hero-lift: 0px;
     transform-origin: center;
-    transition: transform 500ms var(--public-ease-out), box-shadow 500ms ease;
+    transform: perspective(1100px) rotateX(var(--public-tilt-x)) rotateY(var(--public-tilt-y)) translate3d(0, var(--public-hero-lift), 0);
+    transition: transform 500ms var(--public-ease-out), box-shadow 500ms ease, border-color 280ms ease;
+}
+
+.public-hero-card.is-tilting {
+    transition-duration: 110ms;
+    will-change: transform;
 }
 
 .public-stat-item,
@@ -164,7 +203,24 @@ body.public-site {
 .public-gallery-item,
 .public-feature-card,
 .public-program-card {
+    position: relative;
+    overflow: hidden;
     transform: translateZ(0);
+}
+
+.public-content-card::before,
+.public-gallery-item::before,
+.public-feature-card::before,
+.public-program-card::before {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    background: linear-gradient(115deg, transparent 26%, rgb(255 255 255 / .38) 48%, transparent 68%);
+    content: '';
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(115%);
+    transition: transform 620ms var(--public-ease-out), opacity 180ms ease;
 }
 
 .public-content-card:focus-within,
@@ -296,7 +352,7 @@ html.motion-ready body.public-site .reveal-item[data-reveal="scale"] {
 
 @media (hover: hover) and (pointer: fine) {
     .public-hero-card:hover {
-        transform: translateY(-5px) rotate(.25deg);
+        --public-hero-lift: -6px;
         box-shadow: 0 52px 110px -42px rgb(3 52 42 / .88);
     }
 
@@ -304,6 +360,14 @@ html.motion-ready body.public-site .reveal-item[data-reveal="scale"] {
     .public-program-card:hover,
     .public-content-card:hover {
         transform: translateY(-6px);
+    }
+
+    .public-content-card:hover::before,
+    .public-gallery-item:hover::before,
+    .public-feature-card:hover::before,
+    .public-program-card:hover::before {
+        opacity: 1;
+        transform: translateX(-115%);
     }
 }
 
@@ -347,6 +411,10 @@ html.motion-ready body.public-site .reveal-item[data-reveal="scale"] {
         animation: none;
     }
 
+    .public-hero-orb {
+        animation: none;
+    }
+
     .public-scroll-progress,
     .public-route-progress {
         display: none;
@@ -376,6 +444,11 @@ html.motion-ready body.public-site .reveal-item[data-reveal="scale"] {
 @keyframes public-progress-in {
     from { transform: scaleX(0); }
     to { transform: scaleX(1); }
+}
+
+@keyframes public-orb-drift {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+    50% { transform: translate3d(-1rem, .75rem, 0) scale(1.08); }
 }
 
 @keyframes whatsapp-ring {
