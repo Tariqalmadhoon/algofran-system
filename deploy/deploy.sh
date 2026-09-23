@@ -35,6 +35,7 @@ npm ci --no-audit --no-fund
 npm run build
 php artisan config:clear
 php artisan migrate --force
+php artisan db:seed --class=Database\\Seeders\\QuranReferenceSeeder --force
 php artisan storage:link
 php artisan optimize
 php artisan system:production-check --profile=vps

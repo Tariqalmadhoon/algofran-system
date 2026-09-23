@@ -69,6 +69,33 @@ class PhaseTwoStudentTrackingTest extends TestCase
         }
     }
 
+    public function test_teacher_daily_recorder_explains_when_quran_reference_is_missing(): void
+    {
+        $teacherUser = User::factory()->create();
+        $teacherUser->assignRole('teacher');
+        [$center, $branch, $halaqa] = $this->organization();
+        $teacher = TeacherProfile::query()->create([
+            'user_id' => $teacherUser->id,
+            'center_id' => $center->id,
+            'branch_id' => $branch->id,
+            'employee_number' => 'T-MISSING-QURAN-REFERENCE',
+            'active' => true,
+        ]);
+        $halaqa->teacherAssignments()->create([
+            'teacher_profile_id' => $teacher->id,
+            'role' => 'primary',
+            'starts_at' => today()->subDay()->toDateString(),
+        ]);
+        $student = $this->createStudent($teacherUser, $halaqa, 'STU-MISSING-QURAN-REFERENCE');
+
+        Livewire::actingAs($teacherUser)
+            ->test(TeacherDailyRecorder::class)
+            ->call('selectStudent', $student->id)
+            ->assertSet('items.0.enabled', false)
+            ->assertHasErrors(['quranReference'])
+            ->assertSee('مرجع السور والآيات غير مهيّأ');
+    }
+
     public function test_student_lifecycle_preserves_enrollment_guardian_baseline_and_private_document_history(): void
     {
         $this->seed(QuranReferenceSeeder::class);
@@ -584,6 +611,7 @@ class PhaseTwoStudentTrackingTest extends TestCase
 
     public function test_excused_absence_disables_recitation_and_saves_attendance_without_evaluation(): void
     {
+        $this->seed(QuranReferenceSeeder::class);
         $teacherUser = User::factory()->create();
         $teacherUser->assignRole('teacher');
         [$center, $branch, $halaqa] = $this->organization();

@@ -34,6 +34,7 @@ try {
     Invoke-DeploymentStep $NpmCommand @('run', 'build')
     Invoke-DeploymentStep $PhpCommand @('artisan', 'config:clear')
     Invoke-DeploymentStep $PhpCommand @('artisan', 'migrate', '--force')
+    Invoke-DeploymentStep $PhpCommand @('artisan', 'db:seed', '--class=Database\Seeders\QuranReferenceSeeder', '--force')
     Invoke-DeploymentStep $PhpCommand @('artisan', 'storage:link')
     Invoke-DeploymentStep $PhpCommand @('artisan', 'optimize')
     Invoke-DeploymentStep $PhpCommand @('artisan', 'system:production-check')

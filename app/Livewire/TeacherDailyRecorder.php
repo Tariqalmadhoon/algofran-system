@@ -116,7 +116,7 @@ class TeacherDailyRecorder extends Component
             return;
         }
 
-        if ($this->studentId !== '' && ! collect($this->items)->contains('enabled', true)) {
+        if ($this->studentId !== '' && $this->quranReferenceIsReady() && ! collect($this->items)->contains('enabled', true)) {
             $this->items[0]['enabled'] = true;
         }
     }
@@ -188,7 +188,11 @@ class TeacherDailyRecorder extends Component
 
         $this->resetSessionDetails();
         $this->studentId = (string) $student->id;
-        $this->items[0]['enabled'] = true;
+        if ($this->quranReferenceIsReady()) {
+            $this->items[0]['enabled'] = true;
+        } else {
+            $this->addError('quranReference', 'مرجع السور والآيات غير مهيّأ بعد. يمكن تسجيل الحضور فقط إلى أن يستكمل مدير النظام التهيئة.');
+        }
         $this->dispatch('daily-student-selected');
     }
 
@@ -249,6 +253,12 @@ class TeacherDailyRecorder extends Component
     public function toggleItem(int $index): void
     {
         if (! isset($this->items[$index])) {
+            return;
+        }
+
+        if (! $this->quranReferenceIsReady()) {
+            $this->addError('quranReference', 'مرجع السور والآيات غير مهيّأ بعد؛ لا يمكن إضافة بند تسميع قبل استكماله.');
+
             return;
         }
 
@@ -366,6 +376,12 @@ class TeacherDailyRecorder extends Component
             'generalEvaluation' => 'التقييم العام',
             'notes' => 'ملاحظات الجلسة',
         ]);
+
+        if (collect($data['items'])->contains(fn (array $item) => ! empty($item['enabled'])) && ! $this->quranReferenceIsReady()) {
+            $this->addError('quranReference', 'مرجع السور والآيات غير مهيّأ بعد؛ لا يمكن حفظ التسميع قبل استكماله.');
+
+            return;
+        }
 
         $halaqa = Halaqa::query()->findOrFail($data['halaqaId']);
         $student = Student::query()->findOrFail($data['studentId']);
@@ -500,6 +516,7 @@ class TeacherDailyRecorder extends Component
         }
 
         $surahs = QuranSurah::query()->orderBy('id')->get(['id', 'name_arabic', 'verses_count']);
+        $quranReferenceReady = $surahs->count() === 114 && QuranAyah::query()->count() === 6236;
         $historyStudent = $allStudents->firstWhere('id', (int) $this->historyStudentId);
         $historyRecords = collect();
         $historySummary = ['total' => 0, 'filtered' => 0, 'last_date' => null];
@@ -552,6 +569,7 @@ class TeacherDailyRecorder extends Component
                 'waiting' => $allStudents->where('recorded_for_date', false)->count(),
             ],
             'surahs' => $surahs,
+            'quranReferenceReady' => $quranReferenceReady,
             'rangeSummaries' => $this->rangeSummaries($surahs),
             'attendanceStatuses' => AttendanceStatus::cases(),
             'evaluations' => EvaluationRating::cases(),
@@ -644,6 +662,12 @@ class TeacherDailyRecorder extends Component
         }
 
         return $ayah;
+    }
+
+    private function quranReferenceIsReady(): bool
+    {
+        return QuranSurah::query()->count() === 114
+            && QuranAyah::query()->count() === 6236;
     }
 
     private function resetRecorder(): void
