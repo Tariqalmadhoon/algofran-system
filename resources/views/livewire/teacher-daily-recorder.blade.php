@@ -9,6 +9,7 @@
         $progressPercentage = $studentStats['total'] > 0 ? (int) round(($studentStats['recorded'] / $studentStats['total']) * 100) : 0;
         $attendanceLabel = collect($attendanceStatuses)->first(fn ($status) => $status->value === $attendanceStatus)?->label() ?? 'الحضور';
         $isAbsence = in_array($attendanceStatus, ['absent', 'excused'], true);
+        $isBackdatedRecord = $recordDate !== '' && $recordDate < today()->toDateString();
         $typeDescriptions = [
             'new_memorization' => 'المقدار الجديد الذي حفظه الطالب اليوم',
             'recent_revision' => 'مراجعة المحفوظ القريب وتثبيته',
@@ -63,7 +64,7 @@
 
     <ol class="grid gap-3 sm:grid-cols-3" aria-label="مراحل التسجيل">
         @foreach([
-            ['label' => 'الإعداد', 'hint' => 'التاريخ والحلقة', 'done' => $recordDate !== '' && $halaqaId !== ''],
+            ['label' => 'الإعداد', 'hint' => $isBackdatedRecord ? 'تسجيل متأخر · '.$recordDate : 'التاريخ والحلقة', 'done' => $recordDate !== '' && $halaqaId !== ''],
             ['label' => 'الطالب', 'hint' => $selectedStudent?->full_name ?? 'اختر طالبًا', 'done' => $studentId !== ''],
             ['label' => 'الجلسة', 'hint' => $studentId ? 'الحضور والتسميع' : 'تبدأ بعد اختيار الطالب', 'done' => $studentId !== '' && ($isAbsence || $completedRanges > 0)],
         ] as $stepIndex => $step)
@@ -85,15 +86,30 @@
         </x-feedback-alert>
     @endif
 
-    <section class="panel">
+    <section @class(['panel', '!border-amber-200 !bg-amber-50/30' => $isBackdatedRecord])>
         <div class="mb-5 flex items-center gap-3">
-            <span class="grid size-10 place-items-center rounded-2xl bg-emerald-100 font-black text-emerald-800">1</span>
-            <div><p class="eyebrow !mb-0">إعداد الجلسة</p><h2 class="section-title">أين ومتى؟</h2></div>
+            <span @class(['grid size-10 place-items-center rounded-2xl font-black', 'bg-amber-100 text-amber-800' => $isBackdatedRecord, 'bg-emerald-100 text-emerald-800' => ! $isBackdatedRecord])>1</span>
+            <div><p @class(['eyebrow !mb-0', '!text-amber-700' => $isBackdatedRecord])>إعداد الجلسة</p><h2 class="section-title">أين ومتى تم التسميع؟</h2></div>
         </div>
         <div class="grid gap-4 md:grid-cols-2">
-            <label><span class="form-label">تاريخ التسجيل</span><input wire:model.live="recordDate" type="date" max="{{ today()->toDateString() }}" class="form-input"><x-input-error :messages="$errors->get('recordDate')" /></label>
+            <div>
+                <span class="form-label">تاريخ الجلسة الفعلي</span>
+                <div class="grid grid-cols-[auto_auto_minmax(0,1fr)] gap-2">
+                    <button wire:click="chooseRecordDate('{{ today()->toDateString() }}')" type="button" @class(['rounded-xl border px-3 py-2.5 text-xs font-black', 'border-emerald-600 bg-emerald-700 text-white' => $recordDate === today()->toDateString(), 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300' => $recordDate !== today()->toDateString()])>اليوم</button>
+                    <button wire:click="chooseRecordDate('{{ today()->subDay()->toDateString() }}')" type="button" @class(['rounded-xl border px-3 py-2.5 text-xs font-black', 'border-amber-500 bg-amber-500 text-white' => $recordDate === today()->subDay()->toDateString(), 'border-slate-200 bg-white text-slate-600 hover:border-amber-300' => $recordDate !== today()->subDay()->toDateString()])>أمس</button>
+                    <input wire:model.live="recordDate" type="date" max="{{ today()->toDateString() }}" class="form-input" dir="ltr" aria-label="اختيار تاريخ جلسة سابق">
+                </div>
+                <p class="mt-1.5 text-[11px] leading-5 text-slate-500">إذا نُسي تسجيل الجلسة، اختر يومها الحقيقي ثم اختر الطالب وسجّل الحضور والتسميع كالمعتاد.</p>
+                <x-input-error :messages="$errors->get('recordDate')" />
+            </div>
             <label><span class="form-label">الحلقة المسندة إليّ</span><select wire:model.live="halaqaId" class="form-input"><option value="">لا توجد حلقة مسندة</option>@foreach($halaqas as $halaqa)<option value="{{ $halaqa->id }}">{{ $halaqa->name }}</option>@endforeach</select><x-input-error :messages="$errors->get('halaqaId')" /></label>
         </div>
+        @if($isBackdatedRecord)
+            <div class="mt-4 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900" role="status">
+                <span class="grid size-8 shrink-0 place-items-center rounded-xl bg-white font-black shadow-sm">↺</span>
+                <div><strong class="block text-sm">أنت تسجّل جلسة سابقة بتاريخ {{ $recordDate }}</strong><span class="mt-1 block text-xs leading-5 text-amber-800">سيظهر السجل في كشف الطالب وإحصائيات الحضور والحفظ ضمن هذا التاريخ، مع الاحتفاظ بوقت الإدخال الحالي في سجل التدقيق.</span></div>
+            </div>
+        @endif
     </section>
 
     <section class="panel">

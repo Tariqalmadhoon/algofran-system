@@ -128,6 +128,10 @@ class RecordStudentDailyRecordAction
         User $actor,
     ): Carbon {
         $date = Carbon::parse($recordDate)->startOfDay();
+        if ($date->isFuture()) {
+            throw ValidationException::withMessages(['record_date' => 'لا يمكن تسجيل جلسة بتاريخ مستقبلي.']);
+        }
+
         $this->ensureActorCanRecord($actor, $teacher, $halaqa, $date);
         $this->ensureStudentWasEnrolled($student, $halaqa, $date);
 

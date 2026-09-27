@@ -464,6 +464,49 @@ class PhaseTwoStudentTrackingTest extends TestCase
         Storage::disk('private')->assertMissing($photo->path);
     }
 
+    public function test_teacher_can_record_a_missed_session_for_a_previous_assigned_day(): void
+    {
+        $this->seed(QuranReferenceSeeder::class);
+        $teacherUser = User::factory()->create();
+        $teacherUser->assignRole('teacher');
+        [$center, $branch, $halaqa] = $this->organization();
+        $teacher = TeacherProfile::query()->create([
+            'user_id' => $teacherUser->id,
+            'center_id' => $center->id,
+            'branch_id' => $branch->id,
+            'employee_number' => 'T-BACKDATED-DAILY',
+            'active' => true,
+        ]);
+        $halaqa->teacherAssignments()->create([
+            'teacher_profile_id' => $teacher->id,
+            'role' => 'primary',
+            'starts_at' => today()->subMonth()->toDateString(),
+        ]);
+        $student = $this->createStudent($teacherUser, $halaqa, 'STU-BACKDATED-DAILY');
+        $missedDate = today()->subDay()->toDateString();
+
+        Livewire::actingAs($teacherUser)
+            ->test(TeacherDailyRecorder::class)
+            ->call('chooseRecordDate', $missedDate)
+            ->assertSet('recordDate', $missedDate)
+            ->assertSee('أنت تسجّل جلسة سابقة بتاريخ')
+            ->call('selectStudent', $student->id)
+            ->set('items.0.start_surah_id', '1')
+            ->set('items.0.start_ayah_number', '1')
+            ->set('items.0.end_surah_id', '1')
+            ->set('items.0.end_ayah_number', '7')
+            ->call('save')
+            ->assertHasNoErrors()
+            ->assertSee('تاريخ الجلسة:');
+
+        $record = $student->dailyRecords()->whereDate('record_date', $missedDate)->sole();
+        $this->assertSame($teacher->id, $record->teacher_profile_id);
+        $this->assertSame($missedDate, $record->record_date->toDateString());
+        $this->assertSame($student->id, $record->attendance->student_id);
+        $this->assertSame($missedDate, $record->attendance->record_date->toDateString());
+        $this->assertSame('present', $record->attendance->status->value);
+    }
+
     public function test_teacher_daily_recorder_guides_quran_range_and_exposes_duplicate_errors(): void
     {
         $this->seed(QuranReferenceSeeder::class);
