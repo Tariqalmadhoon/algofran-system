@@ -14,6 +14,7 @@ use App\Models\ReportExport;
 use App\Models\Student;
 use App\Models\TeacherProfile;
 use App\Services\ReportExportService;
+use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Gate;
@@ -83,6 +84,19 @@ class TeacherDailyRecorder extends Component
         $this->closeStudentHistory();
         $this->resetRecorder();
         $this->resetValidation();
+    }
+
+    public function chooseRecordDate(string $date): void
+    {
+        $data = validator(
+            ['recordDate' => $date],
+            ['recordDate' => ['required', 'date_format:Y-m-d', 'before_or_equal:today']],
+            [],
+            ['recordDate' => 'تاريخ التسجيل'],
+        )->validate();
+
+        $this->recordDate = $data['recordDate'];
+        $this->updatedRecordDate();
     }
 
     public function updatedHalaqaId(): void
@@ -451,8 +465,9 @@ class TeacherDailyRecorder extends Component
 
         $studentName = $student->full_name;
         $itemsCount = count($items);
+        $recordDateLabel = Carbon::parse($data['recordDate'])->locale('ar')->translatedFormat('l، j F Y');
         $this->resetRecorder();
-        session()->flash('success', "تم حفظ الحضور والتسميع اليومي للطالب. {$studentName}: {$itemsCount} بنود تسميع. يمكنك الآن اختيار الطالب التالي.");
+        session()->flash('success', "تم حفظ الحضور والتسميع اليومي للطالب. {$studentName} · تاريخ الجلسة: {$recordDateLabel} · {$itemsCount} بنود تسميع. يمكنك الآن اختيار الطالب التالي.");
     }
 
     public function exportMemorizationRecords(ReportExportService $exports): void
