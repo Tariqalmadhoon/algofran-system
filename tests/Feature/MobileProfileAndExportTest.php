@@ -32,7 +32,7 @@ class MobileProfileAndExportTest extends TestCase
         $this->seed(QuranReferenceSeeder::class);
     }
 
-    public function test_bootstrap_v3_and_profile_endpoints_include_offline_profiles_without_private_identity_data(): void
+    public function test_bootstrap_v4_and_profile_endpoints_include_offline_profiles_without_private_identity_data(): void
     {
         [$user, $teacher, $halaqa] = $this->teacherWorkspace();
         $student = $this->student($halaqa, 'PROFILE-001', 'طالب الملف المتكامل');
@@ -87,7 +87,7 @@ class MobileProfileAndExportTest extends TestCase
         $bootstrap = $this->withToken($token)
             ->getJson('/api/v1/mobile/bootstrap?device_uuid='.$deviceUuid)
             ->assertOk()
-            ->assertJsonPath('data.schema_version', 3)
+            ->assertJsonPath('data.schema_version', 4)
             ->assertJsonPath('data.teacher.id', $teacher->id)
             ->assertJsonPath('data.teacher.user_id', $user->id)
             ->assertJsonPath('data.teacher.center.name', $teacher->center->name)

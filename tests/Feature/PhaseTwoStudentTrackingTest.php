@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Actions\Guardians\CreateGuardianAction;
+use App\Actions\Recitations\RecordStudentDailyRecordAction;
 use App\Actions\Students\ArchiveStudentAction;
 use App\Actions\Students\CreateStudentAction;
 use App\Actions\Students\EnrollStudentInHalaqaAction;
@@ -21,6 +22,7 @@ use App\Models\QuranSurah;
 use App\Models\ReportExport;
 use App\Models\StaffProfile;
 use App\Models\Student;
+use App\Models\TeacherAbsence;
 use App\Models\TeacherProfile;
 use App\Models\User;
 use App\Services\PrivateFileService;
@@ -699,6 +701,61 @@ class PhaseTwoStudentTrackingTest extends TestCase
             'general_evaluation' => null,
         ]);
         $this->assertDatabaseCount('recitation_items', 0);
+    }
+
+    public function test_teacher_absence_blocks_all_student_records_for_the_halaqa_and_date(): void
+    {
+        $teacherUser = User::factory()->create();
+        $teacherUser->assignRole('teacher');
+        [$center, $branch, $halaqa] = $this->organization();
+        $teacher = TeacherProfile::query()->create([
+            'user_id' => $teacherUser->id,
+            'center_id' => $center->id,
+            'branch_id' => $branch->id,
+            'employee_number' => 'T-ABSENT',
+            'active' => true,
+        ]);
+        $halaqa->teacherAssignments()->create([
+            'teacher_profile_id' => $teacher->id,
+            'role' => 'primary',
+            'starts_at' => today()->subMonth()->toDateString(),
+        ]);
+        $student = $this->createStudent($teacherUser, $halaqa, 'STU-TEACHER-ABSENT');
+
+        Livewire::actingAs($teacherUser)
+            ->test(TeacherDailyRecorder::class)
+            ->set('teacherAbsenceReason', 'ظرف صحي')
+            ->call('recordTeacherAbsence')
+            ->assertHasNoErrors()
+            ->assertSee('المحفّظ غائب عن الحلقة في هذا التاريخ')
+            ->call('selectStudent', $student->id)
+            ->assertHasErrors(['studentId']);
+
+        $this->assertDatabaseHas('teacher_absences', [
+            'teacher_profile_id' => $teacher->id,
+            'halaqa_id' => $halaqa->id,
+            'reason' => 'ظرف صحي',
+        ]);
+        $this->assertTrue(TeacherAbsence::query()->whereDate('absence_date', today())->exists());
+
+        try {
+            app(RecordStudentDailyRecordAction::class)->execute(
+                $student,
+                $halaqa,
+                $teacher,
+                [
+                    'record_date' => today()->toDateString(),
+                    'attendance_status' => 'present',
+                    'items' => [],
+                ],
+                $teacherUser,
+            );
+            $this->fail('A student record was accepted while the teacher was absent.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('record_date', $exception->errors());
+        }
+
+        $this->assertDatabaseCount('daily_records', 0);
     }
 
     public function test_teacher_and_guardian_student_visibility_is_scoped(): void

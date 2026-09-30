@@ -59,6 +59,11 @@ class Halaqa extends Model
         return $this->hasMany(DailyRecord::class);
     }
 
+    public function teacherAbsences(): HasMany
+    {
+        return $this->hasMany(TeacherAbsence::class);
+    }
+
     public function alerts(): HasMany
     {
         return $this->hasMany(StudentAlert::class);

@@ -56,7 +56,7 @@ class MobileOfflineSyncTest extends TestCase
         $bootstrap = $this->withToken($token)
             ->getJson('/api/v1/mobile/bootstrap?device_uuid='.$deviceUuid)
             ->assertOk()
-            ->assertJsonPath('data.schema_version', 3)
+            ->assertJsonPath('data.schema_version', 4)
             ->assertJsonPath('data.teacher.id', $teacher->id)
             ->assertJsonPath('data.halaqas.0.id', $halaqa->id)
             ->assertJsonCount(2, 'data.halaqas.0.students')
@@ -199,6 +199,62 @@ class MobileOfflineSyncTest extends TestCase
         $this->assertDatabaseHas('daily_records', [
             'student_id' => $outsideStudent->id,
             'notes' => 'سجل خارج نطاق المحفظ يجب ألا تُكشف تفاصيله',
+        ]);
+    }
+
+    public function test_offline_teacher_absence_sync_is_idempotent_and_blocks_student_records(): void
+    {
+        [$teacherUser, $teacher, $halaqa] = $this->teacherWorkspace();
+        $student = $this->student($halaqa, 'MOB-ABSENT-001', 'طالب يوم غياب المحفظ');
+        $device = MobileDevice::query()->create([
+            'user_id' => $teacherUser->id,
+            'uuid' => (string) Str::uuid(),
+            'name' => 'هاتف اختبار غياب المحفظ',
+            'platform' => 'android',
+        ]);
+        Sanctum::actingAs($teacherUser, ['mobile:read', 'mobile:sync']);
+        $operationUuid = (string) Str::uuid();
+        $absenceOperation = [
+            'operation_uuid' => $operationUuid,
+            'client_created_at' => now()->toISOString(),
+            'teacher_absence' => [
+                'halaqa_id' => $halaqa->id,
+                'absence_date' => today()->toDateString(),
+                'reason' => 'إجازة مرضية',
+            ],
+        ];
+
+        $this->postJson('/api/v1/mobile/sync/teacher-absences', [
+            'device_uuid' => $device->uuid,
+            'operations' => [$absenceOperation],
+        ])->assertOk()
+            ->assertJsonPath('data.results.0.status', 'accepted')
+            ->assertJsonPath('data.results.0.teacher_absence.halaqa_id', $halaqa->id)
+            ->assertJsonPath('data.summary.accepted', 1);
+
+        $this->postJson('/api/v1/mobile/sync/teacher-absences', [
+            'device_uuid' => $device->uuid,
+            'operations' => [$absenceOperation],
+        ])->assertOk()
+            ->assertJsonPath('data.results.0.status', 'already_processed');
+
+        $this->getJson('/api/v1/mobile/bootstrap?device_uuid='.$device->uuid)
+            ->assertOk()
+            ->assertJsonPath('data.teacher_absences.0.reason', 'إجازة مرضية');
+
+        $this->postJson('/api/v1/mobile/sync/daily-records', [
+            'device_uuid' => $device->uuid,
+            'operations' => [$this->operation((string) Str::uuid(), $student, $halaqa)],
+        ])->assertOk()
+            ->assertJsonPath('data.results.0.status', 'rejected')
+            ->assertJsonPath('data.results.0.error.code', 'validation_failed');
+
+        $this->assertDatabaseCount('teacher_absences', 1);
+        $this->assertDatabaseCount('daily_records', 0);
+        $this->assertDatabaseHas('mobile_sync_operations', [
+            'operation_uuid' => $operationUuid,
+            'operation_type' => 'teacher_absence.create',
+            'status' => 'accepted',
         ]);
     }
 

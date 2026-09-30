@@ -9,6 +9,7 @@ import '../../../core/database/app_database.dart';
 import '../../../shared/widgets/brand_logo.dart';
 import '../../daily/presentation/halaqa_students_screen.dart';
 import '../../profile/presentation/teacher_profile_screen.dart';
+import '../../settings/presentation/reminder_settings_screen.dart';
 import '../../update/presentation/app_update_banner.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -26,8 +27,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    Future.microtask(() {
-      if (mounted) ref.read(appUpdateControllerProvider.notifier).check();
+    Future.microtask(() async {
+      if (mounted) {
+        ref.read(appUpdateControllerProvider.notifier).check();
+        final reminders = ref.read(dailyReminderServiceProvider);
+        await reminders.requestPermission();
+        await reminders.refreshSchedule();
+      }
     });
   }
 
@@ -50,7 +56,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     ref.listen(appControllerProvider, (previous, next) {
       if (previous?.syncing == true && !next.syncing && next.error == null) {
         Future.microtask(() {
-          if (mounted) ref.read(appUpdateControllerProvider.notifier).check();
+          if (mounted) {
+            ref.read(appUpdateControllerProvider.notifier).check();
+            ref.read(dailyReminderServiceProvider).refreshSchedule();
+          }
         });
       }
       final text = next.error ?? next.message;
@@ -112,6 +121,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           PopupMenuButton<String>(
             onSelected: (value) async {
               if (value == 'logout') {
+                await ref.read(dailyReminderServiceProvider).cancelScheduled();
                 ref.read(appControllerProvider.notifier).logout();
               } else if (value == 'updates') {
                 await ref
@@ -127,9 +137,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     ),
                   );
                 }
+              } else if (value == 'reminders') {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ReminderSettingsScreen(),
+                  ),
+                );
               }
             },
             itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'reminders',
+                child: Text('تذكيرات السجل اليومي'),
+              ),
               PopupMenuItem(
                 value: 'updates',
                 child: Text('التحقق من تحديث التطبيق'),
@@ -504,10 +524,15 @@ class _OutboxTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final outbox = ref.watch(outboxProvider);
     final studentOperations = ref.watch(studentOperationsProvider);
-    if (outbox.isLoading || studentOperations.isLoading) {
+    final teacherAbsences = ref.watch(pendingTeacherAbsencesProvider);
+    if (outbox.isLoading ||
+        studentOperations.isLoading ||
+        teacherAbsences.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (outbox.hasError || studentOperations.hasError) {
+    if (outbox.hasError ||
+        studentOperations.hasError ||
+        teacherAbsences.hasError) {
       return const _EmptyState(
         icon: Icons.error_outline_rounded,
         title: 'تعذر عرض طابور المزامنة',
@@ -517,6 +542,8 @@ class _OutboxTab extends ConsumerWidget {
     final records = outbox.valueOrNull ?? const <PendingDailyRecord>[];
     final operations =
         studentOperations.valueOrNull ?? const <PendingStudentOperation>[];
+    final absenceOperations =
+        teacherAbsences.valueOrNull ?? const <PendingTeacherAbsence>[];
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
       children: [
@@ -548,19 +575,71 @@ class _OutboxTab extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 16),
-        if (records.isEmpty && operations.isEmpty)
+        if (records.isEmpty && operations.isEmpty && absenceOperations.isEmpty)
           const _EmptyState(
             icon: Icons.cloud_done_rounded,
             title: 'لا توجد عمليات معلقة',
             subtitle: 'كل البيانات المحلية متزامنة.',
           )
         else ...[
+          ...absenceOperations.map(
+            (operation) => _TeacherAbsenceOperationCard(operation: operation),
+          ),
           ...operations.map(
             (operation) => _StudentOperationCard(operation: operation),
           ),
           ...records.map((record) => _OutboxCard(record: record)),
         ],
       ],
+    );
+  }
+}
+
+class _TeacherAbsenceOperationCard extends ConsumerWidget {
+  const _TeacherAbsenceOperationCard({required this.operation});
+
+  final PendingTeacherAbsence operation;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final status = switch (operation.status) {
+      'synced' => 'تم الاعتماد',
+      'syncing' => 'جارٍ الإرسال',
+      'rejected' => 'رفض الخادم العملية',
+      'conflict' => 'تعارض يحتاج مراجعة',
+      'failed' => 'تعذر الإرسال وسيعاد لاحقًا',
+      _ => 'بانتظار المزامنة',
+    };
+    final canDismiss = [
+      'synced',
+      'rejected',
+      'conflict',
+    ].contains(operation.status);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        leading: const CircleAvatar(
+          backgroundColor: Color(0xFFFFE6E3),
+          child: Icon(Icons.event_busy_rounded, color: Color(0xFF9A2D25)),
+        ),
+        title: const Text(
+          'غياب المحفّظ',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+        subtitle: Text(
+          '$status • ${recordDateKey(operation.absenceDate)}\n${operation.reason}${operation.lastError == null ? '' : '\n${operation.lastError}'}',
+        ),
+        isThreeLine: true,
+        trailing: canDismiss
+            ? IconButton(
+                tooltip: 'إخفاء العملية',
+                icon: const Icon(Icons.close_rounded),
+                onPressed: () => ref
+                    .read(databaseProvider)
+                    .dismissTeacherAbsenceOperation(operation.operationUuid),
+              )
+            : null,
+      ),
     );
   }
 }

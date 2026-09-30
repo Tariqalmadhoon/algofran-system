@@ -9,6 +9,7 @@ use App\Models\Attendance;
 use App\Models\DailyRecord;
 use App\Models\Halaqa;
 use App\Models\Student;
+use App\Models\TeacherAbsence;
 use App\Models\TeacherProfile;
 use App\Models\User;
 use App\Services\AuditLogger;
@@ -17,6 +18,7 @@ use App\Services\StudentAchievementEngine;
 use App\Services\StudentAlertEngine;
 use App\Services\StudentProgressService;
 use App\Services\StudentTimelineService;
+use App\Services\TeacherDailyScopeService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -30,11 +32,13 @@ class RecordStudentDailyRecordAction
         private readonly StudentProgressService $progress,
         private readonly StudentAlertEngine $alerts,
         private readonly StudentAchievementEngine $achievements,
+        private readonly TeacherDailyScopeService $teacherScope,
     ) {}
 
     public function execute(Student $student, Halaqa $halaqa, TeacherProfile $teacher, array $data, User $actor): DailyRecord
     {
         return DB::transaction(function () use ($student, $halaqa, $teacher, $data, $actor) {
+            Halaqa::query()->whereKey($halaqa->id)->lockForUpdate()->firstOrFail();
             $date = $this->ensureCanRecord($student, $halaqa, $teacher, $data['record_date'], $actor);
 
             if ($student->dailyRecords()->whereDate('record_date', $date)->exists()) {
@@ -127,38 +131,20 @@ class RecordStudentDailyRecordAction
         string $recordDate,
         User $actor,
     ): Carbon {
-        $date = Carbon::parse($recordDate)->startOfDay();
-        if ($date->isFuture()) {
-            throw ValidationException::withMessages(['record_date' => 'لا يمكن تسجيل جلسة بتاريخ مستقبلي.']);
-        }
-
-        $this->ensureActorCanRecord($actor, $teacher, $halaqa, $date);
+        $date = $this->teacherScope->ensure($halaqa, $teacher, $recordDate, $actor);
         $this->ensureStudentWasEnrolled($student, $halaqa, $date);
 
-        return $date;
-    }
-
-    private function ensureActorCanRecord(User $actor, TeacherProfile $teacher, Halaqa $halaqa, Carbon $date): void
-    {
-        $actorTeacherProfile = $actor->teacherProfile;
-
-        if ($actorTeacherProfile && (int) $actorTeacherProfile->id !== (int) $teacher->id) {
-            throw ValidationException::withMessages(['teacher' => 'لا يمكنك التسجيل باسم محفظ آخر.']);
-        }
-
-        if (! $actor->active || $actor->archived_at || ! $teacher->active || ! $teacher->user?->active || ! $halaqa->active) {
-            throw ValidationException::withMessages(['halaqa_id' => 'الحساب التعليمي أو الحلقة غير فعّال حاليًا.']);
-        }
-
-        $assigned = $halaqa->teacherAssignments()
+        if (TeacherAbsence::query()
             ->where('teacher_profile_id', $teacher->id)
-            ->whereDate('starts_at', '<=', $date)
-            ->where(fn ($query) => $query->whereNull('ends_at')->orWhereDate('ends_at', '>=', $date))
-            ->exists();
-
-        if (! $assigned) {
-            throw ValidationException::withMessages(['halaqa_id' => 'المحفظ غير مسند إلى هذه الحلقة في التاريخ المحدد.']);
+            ->where('halaqa_id', $halaqa->id)
+            ->whereDate('absence_date', $date)
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'record_date' => 'المحفّظ مسجّل غائبًا عن هذه الحلقة في التاريخ المحدد؛ لا يمكن تسجيل حفظ للطلاب.',
+            ]);
         }
+
+        return $date;
     }
 
     private function ensureStudentWasEnrolled(Student $student, Halaqa $halaqa, Carbon $date): void

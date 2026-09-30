@@ -5,11 +5,13 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\SyncDailyRecordsRequest;
 use App\Http\Requests\Api\V1\SyncStudentOperationsRequest;
+use App\Http\Requests\Api\V1\SyncTeacherAbsencesRequest;
 use App\Models\MobileDevice;
 use App\Models\User;
 use App\Services\MobileBootstrapService;
 use App\Services\MobileDailySyncService;
 use App\Services\MobileStudentSyncService;
+use App\Services\MobileTeacherAbsenceSyncService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -50,6 +52,16 @@ class MobileSyncController extends Controller
     }
 
     public function students(SyncStudentOperationsRequest $request, MobileStudentSyncService $sync): JsonResponse
+    {
+        $data = $request->validated();
+        $device = $this->device($request->user(), $data['device_uuid']);
+
+        return response()->json([
+            'data' => $sync->push($request->user(), $device, $data['operations']),
+        ]);
+    }
+
+    public function teacherAbsences(SyncTeacherAbsencesRequest $request, MobileTeacherAbsenceSyncService $sync): JsonResponse
     {
         $data = $request->validated();
         $device = $this->device($request->user(), $data['device_uuid']);

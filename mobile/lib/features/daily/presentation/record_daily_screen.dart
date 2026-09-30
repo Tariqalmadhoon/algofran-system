@@ -12,10 +12,12 @@ class RecordDailyScreen extends ConsumerStatefulWidget {
     super.key,
     required this.halaqa,
     required this.student,
+    this.initialRecordDate,
   });
 
   final CachedHalaqa halaqa;
   final MobileStudent student;
+  final DateTime? initialRecordDate;
 
   @override
   ConsumerState<RecordDailyScreen> createState() => _RecordDailyScreenState();
@@ -26,7 +28,7 @@ class _RecordDailyScreenState extends ConsumerState<RecordDailyScreen> {
   final _attendanceNotes = TextEditingController();
   final _sessionNotes = TextEditingController();
   late final Future<_QuranCache> _quran;
-  DateTime _recordDate = DateTime.now();
+  late DateTime _recordDate;
   String _attendanceStatus = 'present';
   String _generalEvaluation = 'very_good';
   final List<_RecitationDraft> _items = [_RecitationDraft()];
@@ -59,6 +61,7 @@ class _RecordDailyScreenState extends ConsumerState<RecordDailyScreen> {
   @override
   void initState() {
     super.initState();
+    _recordDate = widget.initialRecordDate ?? DateTime.now();
     _quran = _loadQuran();
   }
 
@@ -80,7 +83,7 @@ class _RecordDailyScreenState extends ConsumerState<RecordDailyScreen> {
     final picked = await showDatePicker(
       context: context,
       initialDate: _recordDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+      firstDate: DateTime(2020),
       lastDate: DateTime.now(),
     );
     if (picked != null) setState(() => _recordDate = picked);
@@ -103,21 +106,33 @@ class _RecordDailyScreenState extends ConsumerState<RecordDailyScreen> {
     }
 
     setState(() => _saving = true);
-    await ref
-        .read(syncRepositoryProvider)
-        .queueDailyRecord(
-          studentId: widget.student.serverId,
-          studentClientUuid: widget.student.clientUuid,
-          halaqaId: widget.halaqa.id,
-          recordDate: _recordDate,
-          attendanceStatus: _attendanceStatus,
-          attendanceNotes: _attendanceNotes.text,
-          generalEvaluation: _allowsRecitation ? _generalEvaluation : null,
-          notes: _sessionNotes.text,
-          items: activeItems.map((item) => item.toPayload()).toList(),
+    try {
+      await ref
+          .read(syncRepositoryProvider)
+          .queueDailyRecord(
+            studentId: widget.student.serverId,
+            studentClientUuid: widget.student.clientUuid,
+            halaqaId: widget.halaqa.id,
+            recordDate: _recordDate,
+            attendanceStatus: _attendanceStatus,
+            attendanceNotes: _attendanceNotes.text,
+            generalEvaluation: _allowsRecitation ? _generalEvaluation : null,
+            notes: _sessionNotes.text,
+            items: activeItems.map((item) => item.toPayload()).toList(),
+          );
+    } on StateError {
+      if (mounted) {
+        setState(() => _saving = false);
+        _showError(
+          'لا يمكن تسجيل الطالب لأن المحفّظ مسجّل غائبًا عن الحلقة في هذا التاريخ.',
         );
+      }
+      return;
+    }
     if (!mounted) return;
     setState(() => _saving = false);
+    await ref.read(dailyReminderServiceProvider).refreshSchedule();
+    if (!mounted) return;
     ref.read(appControllerProvider.notifier).syncNow(silent: true);
     Navigator.of(context).pop();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -159,6 +174,35 @@ class _RecordDailyScreenState extends ConsumerState<RecordDailyScreen> {
               children: [
                 _StudentHeader(student: widget.student, halaqa: widget.halaqa),
                 const SizedBox(height: 14),
+                if (!isSameRecordDate(_recordDate, DateTime.now())) ...[
+                  Container(
+                    padding: const EdgeInsets.all(13),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF8E7),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: const Color(0xFFF0D38A)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.history_rounded,
+                          color: Color(0xFF8A6500),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'تسجيل سابق بتاريخ ${DateFormat('yyyy/MM/dd').format(_recordDate)} — سيظهر في كشف الطالب بهذا التاريخ.',
+                            style: const TextStyle(
+                              color: Color(0xFF8A6500),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
                 _SectionCard(
                   title: 'الحضور والجلسة',
                   icon: Icons.fact_check_outlined,
