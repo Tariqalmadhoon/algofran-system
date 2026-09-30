@@ -63,6 +63,21 @@ class SyncRepository {
     return uuid;
   }
 
+  Future<String> queueTeacherAbsence({
+    required int halaqaId,
+    required DateTime absenceDate,
+    required String reason,
+  }) async {
+    final uuid = const Uuid().v4();
+    await database.queueTeacherAbsence(
+      operationUuid: uuid,
+      halaqaId: halaqaId,
+      absenceDate: absenceDate,
+      reason: reason,
+    );
+    return uuid;
+  }
+
   Future<SyncOutcome> syncAll({bool bootstrapIfEmpty = true}) async {
     if (_running) return const SyncOutcome();
     _running = true;
@@ -73,6 +88,11 @@ class SyncRepository {
       var push = const SyncOutcome();
       while (true) {
         final batch = await _pushStudentOperationsBatch();
+        push = push.merge(batch.outcome);
+        if (batch.isEmpty || !batch.shouldContinue) break;
+      }
+      while (true) {
+        final batch = await _pushTeacherAbsencesBatch();
         push = push.merge(batch.outcome);
         if (batch.isEmpty || !batch.shouldContinue) break;
       }
@@ -236,6 +256,83 @@ class SyncRepository {
     } catch (error) {
       final failure = ApiFailure.from(error);
       await database.returnSendingToPending(failure.message);
+      if (error is DioException && error.response?.statusCode == 401) rethrow;
+      return _PushBatchResult(
+        outcome: SyncOutcome(failed: queued.length, message: failure.message),
+        shouldContinue: false,
+      );
+    }
+  }
+
+  Future<_PushBatchResult> _pushTeacherAbsencesBatch() async {
+    final queued = await database.teacherAbsencesToSync();
+    if (queued.isEmpty) return const _PushBatchResult.empty();
+    await database.markTeacherAbsencesSending(
+      queued.map((absence) => absence.operationUuid).toList(),
+    );
+
+    try {
+      final response = await api.dio.post<Map<String, dynamic>>(
+        '/mobile/sync/teacher-absences',
+        data: {
+          'device_uuid': await _requiredDeviceUuid(),
+          'operations': queued
+              .map(
+                (absence) => {
+                  'operation_uuid': absence.operationUuid,
+                  'client_created_at': absence.clientCreatedAt
+                      .toUtc()
+                      .toIso8601String(),
+                  'teacher_absence': {
+                    'halaqa_id': absence.halaqaId,
+                    'absence_date': DateFormat(
+                      'yyyy-MM-dd',
+                    ).format(absence.absenceDate),
+                    'reason': absence.reason,
+                  },
+                },
+              )
+              .toList(),
+        },
+      );
+      final data = Map<String, dynamic>.from(response.data!['data'] as Map);
+      final results = List<Map<String, dynamic>>.from(
+        (data['results'] as List? ?? const []).map(
+          (item) => Map<String, dynamic>.from(item as Map),
+        ),
+      );
+      for (final result in results) {
+        await database.applyTeacherAbsenceSyncResult(
+          result['operation_uuid'] as String,
+          result,
+        );
+      }
+      final summary = Map<String, dynamic>.from(data['summary'] as Map);
+      final returned = results
+          .map((result) => result['operation_uuid'])
+          .whereType<String>()
+          .toSet();
+      final missing = queued
+          .where((absence) => !returned.contains(absence.operationUuid))
+          .length;
+      final failed = (summary['failed'] as int? ?? 0) + missing;
+      if (missing > 0) {
+        await database.returnTeacherAbsencesToPending(
+          'لم يرجع الخادم نتيجة لبعض عمليات غياب المحفّظ. ستعاد المحاولة.',
+        );
+      }
+
+      return _PushBatchResult(
+        outcome: SyncOutcome(
+          accepted: summary['accepted'] as int? ?? 0,
+          rejected: summary['rejected'] as int? ?? 0,
+          failed: failed,
+        ),
+        shouldContinue: failed == 0 && returned.isNotEmpty,
+      );
+    } catch (error) {
+      final failure = ApiFailure.from(error);
+      await database.returnTeacherAbsencesToPending(failure.message);
       if (error is DioException && error.response?.statusCode == 401) rethrow;
       return _PushBatchResult(
         outcome: SyncOutcome(failed: queued.length, message: failure.message),

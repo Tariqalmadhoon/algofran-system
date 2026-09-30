@@ -40,6 +40,11 @@ class TeacherProfile extends Model
         return $this->hasMany(DailyRecord::class);
     }
 
+    public function absences(): HasMany
+    {
+        return $this->hasMany(TeacherAbsence::class);
+    }
+
     public function courses(): HasMany
     {
         return $this->hasMany(Course::class, 'instructor_id');

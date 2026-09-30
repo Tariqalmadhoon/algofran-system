@@ -85,7 +85,7 @@
         <div class="overflow-hidden rounded-[2rem] border border-emerald-950/8 bg-white shadow-[0_24px_80px_-48px_rgba(6,78,59,.4)]">
             <div data-reveal-group="up" data-reveal-stagger="55" class="grid divide-y divide-slate-100 sm:grid-cols-2 sm:divide-x sm:divide-x-reverse sm:divide-y-0 lg:grid-cols-4">
                 @foreach([
-                    ['students', 'طالبًا وطالبة', 'ينمون مع كتاب الله', 'quran'],
+                    ['students', 'طالب', 'ينمون مع كتاب الله', 'quran'],
                     ['halaqas', 'حلقة نشطة', 'تعليم قريب ومنظّم', 'mosque'],
                     ['programs', 'برنامجًا نوعيًا', 'مسارات تناسب الاحتياج', 'crescent'],
                     ['achievements', 'إنجازًا موثّقًا', 'ثمرة متابعة وإتقان', 'certificate'],

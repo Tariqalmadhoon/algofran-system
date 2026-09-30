@@ -2328,6 +2328,1294 @@ class PendingDailyRecordsCompanion extends UpdateCompanion<PendingDailyRecord> {
   }
 }
 
+class $CachedTeacherAbsencesTable extends CachedTeacherAbsences
+    with TableInfo<$CachedTeacherAbsencesTable, CachedTeacherAbsence> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CachedTeacherAbsencesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _halaqaIdMeta = const VerificationMeta(
+    'halaqaId',
+  );
+  @override
+  late final GeneratedColumn<int> halaqaId = GeneratedColumn<int>(
+    'halaqa_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _absenceDateMeta = const VerificationMeta(
+    'absenceDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> absenceDate = GeneratedColumn<DateTime>(
+    'absence_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
+  @override
+  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
+    'reason',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    halaqaId,
+    absenceDate,
+    reason,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cached_teacher_absences';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CachedTeacherAbsence> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('halaqa_id')) {
+      context.handle(
+        _halaqaIdMeta,
+        halaqaId.isAcceptableOrUnknown(data['halaqa_id']!, _halaqaIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_halaqaIdMeta);
+    }
+    if (data.containsKey('absence_date')) {
+      context.handle(
+        _absenceDateMeta,
+        absenceDate.isAcceptableOrUnknown(
+          data['absence_date']!,
+          _absenceDateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_absenceDateMeta);
+    }
+    if (data.containsKey('reason')) {
+      context.handle(
+        _reasonMeta,
+        reason.isAcceptableOrUnknown(data['reason']!, _reasonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_reasonMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CachedTeacherAbsence map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CachedTeacherAbsence(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      halaqaId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}halaqa_id'],
+      )!,
+      absenceDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}absence_date'],
+      )!,
+      reason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reason'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      ),
+    );
+  }
+
+  @override
+  $CachedTeacherAbsencesTable createAlias(String alias) {
+    return $CachedTeacherAbsencesTable(attachedDatabase, alias);
+  }
+}
+
+class CachedTeacherAbsence extends DataClass
+    implements Insertable<CachedTeacherAbsence> {
+  final int id;
+  final int halaqaId;
+  final DateTime absenceDate;
+  final String reason;
+  final DateTime? updatedAt;
+  const CachedTeacherAbsence({
+    required this.id,
+    required this.halaqaId,
+    required this.absenceDate,
+    required this.reason,
+    this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['halaqa_id'] = Variable<int>(halaqaId);
+    map['absence_date'] = Variable<DateTime>(absenceDate);
+    map['reason'] = Variable<String>(reason);
+    if (!nullToAbsent || updatedAt != null) {
+      map['updated_at'] = Variable<DateTime>(updatedAt);
+    }
+    return map;
+  }
+
+  CachedTeacherAbsencesCompanion toCompanion(bool nullToAbsent) {
+    return CachedTeacherAbsencesCompanion(
+      id: Value(id),
+      halaqaId: Value(halaqaId),
+      absenceDate: Value(absenceDate),
+      reason: Value(reason),
+      updatedAt: updatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(updatedAt),
+    );
+  }
+
+  factory CachedTeacherAbsence.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CachedTeacherAbsence(
+      id: serializer.fromJson<int>(json['id']),
+      halaqaId: serializer.fromJson<int>(json['halaqaId']),
+      absenceDate: serializer.fromJson<DateTime>(json['absenceDate']),
+      reason: serializer.fromJson<String>(json['reason']),
+      updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'halaqaId': serializer.toJson<int>(halaqaId),
+      'absenceDate': serializer.toJson<DateTime>(absenceDate),
+      'reason': serializer.toJson<String>(reason),
+      'updatedAt': serializer.toJson<DateTime?>(updatedAt),
+    };
+  }
+
+  CachedTeacherAbsence copyWith({
+    int? id,
+    int? halaqaId,
+    DateTime? absenceDate,
+    String? reason,
+    Value<DateTime?> updatedAt = const Value.absent(),
+  }) => CachedTeacherAbsence(
+    id: id ?? this.id,
+    halaqaId: halaqaId ?? this.halaqaId,
+    absenceDate: absenceDate ?? this.absenceDate,
+    reason: reason ?? this.reason,
+    updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
+  );
+  CachedTeacherAbsence copyWithCompanion(CachedTeacherAbsencesCompanion data) {
+    return CachedTeacherAbsence(
+      id: data.id.present ? data.id.value : this.id,
+      halaqaId: data.halaqaId.present ? data.halaqaId.value : this.halaqaId,
+      absenceDate: data.absenceDate.present
+          ? data.absenceDate.value
+          : this.absenceDate,
+      reason: data.reason.present ? data.reason.value : this.reason,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CachedTeacherAbsence(')
+          ..write('id: $id, ')
+          ..write('halaqaId: $halaqaId, ')
+          ..write('absenceDate: $absenceDate, ')
+          ..write('reason: $reason, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, halaqaId, absenceDate, reason, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CachedTeacherAbsence &&
+          other.id == this.id &&
+          other.halaqaId == this.halaqaId &&
+          other.absenceDate == this.absenceDate &&
+          other.reason == this.reason &&
+          other.updatedAt == this.updatedAt);
+}
+
+class CachedTeacherAbsencesCompanion
+    extends UpdateCompanion<CachedTeacherAbsence> {
+  final Value<int> id;
+  final Value<int> halaqaId;
+  final Value<DateTime> absenceDate;
+  final Value<String> reason;
+  final Value<DateTime?> updatedAt;
+  const CachedTeacherAbsencesCompanion({
+    this.id = const Value.absent(),
+    this.halaqaId = const Value.absent(),
+    this.absenceDate = const Value.absent(),
+    this.reason = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  CachedTeacherAbsencesCompanion.insert({
+    this.id = const Value.absent(),
+    required int halaqaId,
+    required DateTime absenceDate,
+    required String reason,
+    this.updatedAt = const Value.absent(),
+  }) : halaqaId = Value(halaqaId),
+       absenceDate = Value(absenceDate),
+       reason = Value(reason);
+  static Insertable<CachedTeacherAbsence> custom({
+    Expression<int>? id,
+    Expression<int>? halaqaId,
+    Expression<DateTime>? absenceDate,
+    Expression<String>? reason,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (halaqaId != null) 'halaqa_id': halaqaId,
+      if (absenceDate != null) 'absence_date': absenceDate,
+      if (reason != null) 'reason': reason,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  CachedTeacherAbsencesCompanion copyWith({
+    Value<int>? id,
+    Value<int>? halaqaId,
+    Value<DateTime>? absenceDate,
+    Value<String>? reason,
+    Value<DateTime?>? updatedAt,
+  }) {
+    return CachedTeacherAbsencesCompanion(
+      id: id ?? this.id,
+      halaqaId: halaqaId ?? this.halaqaId,
+      absenceDate: absenceDate ?? this.absenceDate,
+      reason: reason ?? this.reason,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (halaqaId.present) {
+      map['halaqa_id'] = Variable<int>(halaqaId.value);
+    }
+    if (absenceDate.present) {
+      map['absence_date'] = Variable<DateTime>(absenceDate.value);
+    }
+    if (reason.present) {
+      map['reason'] = Variable<String>(reason.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CachedTeacherAbsencesCompanion(')
+          ..write('id: $id, ')
+          ..write('halaqaId: $halaqaId, ')
+          ..write('absenceDate: $absenceDate, ')
+          ..write('reason: $reason, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CachedDailyRecordKeysTable extends CachedDailyRecordKeys
+    with TableInfo<$CachedDailyRecordKeysTable, CachedDailyRecordKey> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CachedDailyRecordKeysTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _studentIdMeta = const VerificationMeta(
+    'studentId',
+  );
+  @override
+  late final GeneratedColumn<int> studentId = GeneratedColumn<int>(
+    'student_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _halaqaIdMeta = const VerificationMeta(
+    'halaqaId',
+  );
+  @override
+  late final GeneratedColumn<int> halaqaId = GeneratedColumn<int>(
+    'halaqa_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _recordDateMeta = const VerificationMeta(
+    'recordDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> recordDate = GeneratedColumn<DateTime>(
+    'record_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, studentId, halaqaId, recordDate];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cached_daily_record_keys';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CachedDailyRecordKey> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('student_id')) {
+      context.handle(
+        _studentIdMeta,
+        studentId.isAcceptableOrUnknown(data['student_id']!, _studentIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_studentIdMeta);
+    }
+    if (data.containsKey('halaqa_id')) {
+      context.handle(
+        _halaqaIdMeta,
+        halaqaId.isAcceptableOrUnknown(data['halaqa_id']!, _halaqaIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_halaqaIdMeta);
+    }
+    if (data.containsKey('record_date')) {
+      context.handle(
+        _recordDateMeta,
+        recordDate.isAcceptableOrUnknown(data['record_date']!, _recordDateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_recordDateMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CachedDailyRecordKey map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CachedDailyRecordKey(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      studentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}student_id'],
+      )!,
+      halaqaId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}halaqa_id'],
+      )!,
+      recordDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}record_date'],
+      )!,
+    );
+  }
+
+  @override
+  $CachedDailyRecordKeysTable createAlias(String alias) {
+    return $CachedDailyRecordKeysTable(attachedDatabase, alias);
+  }
+}
+
+class CachedDailyRecordKey extends DataClass
+    implements Insertable<CachedDailyRecordKey> {
+  final int id;
+  final int studentId;
+  final int halaqaId;
+  final DateTime recordDate;
+  const CachedDailyRecordKey({
+    required this.id,
+    required this.studentId,
+    required this.halaqaId,
+    required this.recordDate,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['student_id'] = Variable<int>(studentId);
+    map['halaqa_id'] = Variable<int>(halaqaId);
+    map['record_date'] = Variable<DateTime>(recordDate);
+    return map;
+  }
+
+  CachedDailyRecordKeysCompanion toCompanion(bool nullToAbsent) {
+    return CachedDailyRecordKeysCompanion(
+      id: Value(id),
+      studentId: Value(studentId),
+      halaqaId: Value(halaqaId),
+      recordDate: Value(recordDate),
+    );
+  }
+
+  factory CachedDailyRecordKey.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CachedDailyRecordKey(
+      id: serializer.fromJson<int>(json['id']),
+      studentId: serializer.fromJson<int>(json['studentId']),
+      halaqaId: serializer.fromJson<int>(json['halaqaId']),
+      recordDate: serializer.fromJson<DateTime>(json['recordDate']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'studentId': serializer.toJson<int>(studentId),
+      'halaqaId': serializer.toJson<int>(halaqaId),
+      'recordDate': serializer.toJson<DateTime>(recordDate),
+    };
+  }
+
+  CachedDailyRecordKey copyWith({
+    int? id,
+    int? studentId,
+    int? halaqaId,
+    DateTime? recordDate,
+  }) => CachedDailyRecordKey(
+    id: id ?? this.id,
+    studentId: studentId ?? this.studentId,
+    halaqaId: halaqaId ?? this.halaqaId,
+    recordDate: recordDate ?? this.recordDate,
+  );
+  CachedDailyRecordKey copyWithCompanion(CachedDailyRecordKeysCompanion data) {
+    return CachedDailyRecordKey(
+      id: data.id.present ? data.id.value : this.id,
+      studentId: data.studentId.present ? data.studentId.value : this.studentId,
+      halaqaId: data.halaqaId.present ? data.halaqaId.value : this.halaqaId,
+      recordDate: data.recordDate.present
+          ? data.recordDate.value
+          : this.recordDate,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CachedDailyRecordKey(')
+          ..write('id: $id, ')
+          ..write('studentId: $studentId, ')
+          ..write('halaqaId: $halaqaId, ')
+          ..write('recordDate: $recordDate')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, studentId, halaqaId, recordDate);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CachedDailyRecordKey &&
+          other.id == this.id &&
+          other.studentId == this.studentId &&
+          other.halaqaId == this.halaqaId &&
+          other.recordDate == this.recordDate);
+}
+
+class CachedDailyRecordKeysCompanion
+    extends UpdateCompanion<CachedDailyRecordKey> {
+  final Value<int> id;
+  final Value<int> studentId;
+  final Value<int> halaqaId;
+  final Value<DateTime> recordDate;
+  const CachedDailyRecordKeysCompanion({
+    this.id = const Value.absent(),
+    this.studentId = const Value.absent(),
+    this.halaqaId = const Value.absent(),
+    this.recordDate = const Value.absent(),
+  });
+  CachedDailyRecordKeysCompanion.insert({
+    this.id = const Value.absent(),
+    required int studentId,
+    required int halaqaId,
+    required DateTime recordDate,
+  }) : studentId = Value(studentId),
+       halaqaId = Value(halaqaId),
+       recordDate = Value(recordDate);
+  static Insertable<CachedDailyRecordKey> custom({
+    Expression<int>? id,
+    Expression<int>? studentId,
+    Expression<int>? halaqaId,
+    Expression<DateTime>? recordDate,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (studentId != null) 'student_id': studentId,
+      if (halaqaId != null) 'halaqa_id': halaqaId,
+      if (recordDate != null) 'record_date': recordDate,
+    });
+  }
+
+  CachedDailyRecordKeysCompanion copyWith({
+    Value<int>? id,
+    Value<int>? studentId,
+    Value<int>? halaqaId,
+    Value<DateTime>? recordDate,
+  }) {
+    return CachedDailyRecordKeysCompanion(
+      id: id ?? this.id,
+      studentId: studentId ?? this.studentId,
+      halaqaId: halaqaId ?? this.halaqaId,
+      recordDate: recordDate ?? this.recordDate,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (studentId.present) {
+      map['student_id'] = Variable<int>(studentId.value);
+    }
+    if (halaqaId.present) {
+      map['halaqa_id'] = Variable<int>(halaqaId.value);
+    }
+    if (recordDate.present) {
+      map['record_date'] = Variable<DateTime>(recordDate.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CachedDailyRecordKeysCompanion(')
+          ..write('id: $id, ')
+          ..write('studentId: $studentId, ')
+          ..write('halaqaId: $halaqaId, ')
+          ..write('recordDate: $recordDate')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PendingTeacherAbsencesTable extends PendingTeacherAbsences
+    with TableInfo<$PendingTeacherAbsencesTable, PendingTeacherAbsence> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PendingTeacherAbsencesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _operationUuidMeta = const VerificationMeta(
+    'operationUuid',
+  );
+  @override
+  late final GeneratedColumn<String> operationUuid = GeneratedColumn<String>(
+    'operation_uuid',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _halaqaIdMeta = const VerificationMeta(
+    'halaqaId',
+  );
+  @override
+  late final GeneratedColumn<int> halaqaId = GeneratedColumn<int>(
+    'halaqa_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _absenceDateMeta = const VerificationMeta(
+    'absenceDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> absenceDate = GeneratedColumn<DateTime>(
+    'absence_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
+  @override
+  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
+    'reason',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('pending'),
+  );
+  static const VerificationMeta _attemptsMeta = const VerificationMeta(
+    'attempts',
+  );
+  @override
+  late final GeneratedColumn<int> attempts = GeneratedColumn<int>(
+    'attempts',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _lastErrorMeta = const VerificationMeta(
+    'lastError',
+  );
+  @override
+  late final GeneratedColumn<String> lastError = GeneratedColumn<String>(
+    'last_error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _serverAbsenceIdMeta = const VerificationMeta(
+    'serverAbsenceId',
+  );
+  @override
+  late final GeneratedColumn<int> serverAbsenceId = GeneratedColumn<int>(
+    'server_absence_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _clientCreatedAtMeta = const VerificationMeta(
+    'clientCreatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> clientCreatedAt =
+      GeneratedColumn<DateTime>(
+        'client_created_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    operationUuid,
+    halaqaId,
+    absenceDate,
+    reason,
+    status,
+    attempts,
+    lastError,
+    serverAbsenceId,
+    clientCreatedAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pending_teacher_absences';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PendingTeacherAbsence> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('operation_uuid')) {
+      context.handle(
+        _operationUuidMeta,
+        operationUuid.isAcceptableOrUnknown(
+          data['operation_uuid']!,
+          _operationUuidMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_operationUuidMeta);
+    }
+    if (data.containsKey('halaqa_id')) {
+      context.handle(
+        _halaqaIdMeta,
+        halaqaId.isAcceptableOrUnknown(data['halaqa_id']!, _halaqaIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_halaqaIdMeta);
+    }
+    if (data.containsKey('absence_date')) {
+      context.handle(
+        _absenceDateMeta,
+        absenceDate.isAcceptableOrUnknown(
+          data['absence_date']!,
+          _absenceDateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_absenceDateMeta);
+    }
+    if (data.containsKey('reason')) {
+      context.handle(
+        _reasonMeta,
+        reason.isAcceptableOrUnknown(data['reason']!, _reasonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_reasonMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('attempts')) {
+      context.handle(
+        _attemptsMeta,
+        attempts.isAcceptableOrUnknown(data['attempts']!, _attemptsMeta),
+      );
+    }
+    if (data.containsKey('last_error')) {
+      context.handle(
+        _lastErrorMeta,
+        lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta),
+      );
+    }
+    if (data.containsKey('server_absence_id')) {
+      context.handle(
+        _serverAbsenceIdMeta,
+        serverAbsenceId.isAcceptableOrUnknown(
+          data['server_absence_id']!,
+          _serverAbsenceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('client_created_at')) {
+      context.handle(
+        _clientCreatedAtMeta,
+        clientCreatedAt.isAcceptableOrUnknown(
+          data['client_created_at']!,
+          _clientCreatedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_clientCreatedAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {operationUuid};
+  @override
+  PendingTeacherAbsence map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PendingTeacherAbsence(
+      operationUuid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}operation_uuid'],
+      )!,
+      halaqaId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}halaqa_id'],
+      )!,
+      absenceDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}absence_date'],
+      )!,
+      reason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reason'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      attempts: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}attempts'],
+      )!,
+      lastError: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_error'],
+      ),
+      serverAbsenceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}server_absence_id'],
+      ),
+      clientCreatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}client_created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PendingTeacherAbsencesTable createAlias(String alias) {
+    return $PendingTeacherAbsencesTable(attachedDatabase, alias);
+  }
+}
+
+class PendingTeacherAbsence extends DataClass
+    implements Insertable<PendingTeacherAbsence> {
+  final String operationUuid;
+  final int halaqaId;
+  final DateTime absenceDate;
+  final String reason;
+  final String status;
+  final int attempts;
+  final String? lastError;
+  final int? serverAbsenceId;
+  final DateTime clientCreatedAt;
+  final DateTime updatedAt;
+  const PendingTeacherAbsence({
+    required this.operationUuid,
+    required this.halaqaId,
+    required this.absenceDate,
+    required this.reason,
+    required this.status,
+    required this.attempts,
+    this.lastError,
+    this.serverAbsenceId,
+    required this.clientCreatedAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['operation_uuid'] = Variable<String>(operationUuid);
+    map['halaqa_id'] = Variable<int>(halaqaId);
+    map['absence_date'] = Variable<DateTime>(absenceDate);
+    map['reason'] = Variable<String>(reason);
+    map['status'] = Variable<String>(status);
+    map['attempts'] = Variable<int>(attempts);
+    if (!nullToAbsent || lastError != null) {
+      map['last_error'] = Variable<String>(lastError);
+    }
+    if (!nullToAbsent || serverAbsenceId != null) {
+      map['server_absence_id'] = Variable<int>(serverAbsenceId);
+    }
+    map['client_created_at'] = Variable<DateTime>(clientCreatedAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  PendingTeacherAbsencesCompanion toCompanion(bool nullToAbsent) {
+    return PendingTeacherAbsencesCompanion(
+      operationUuid: Value(operationUuid),
+      halaqaId: Value(halaqaId),
+      absenceDate: Value(absenceDate),
+      reason: Value(reason),
+      status: Value(status),
+      attempts: Value(attempts),
+      lastError: lastError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastError),
+      serverAbsenceId: serverAbsenceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(serverAbsenceId),
+      clientCreatedAt: Value(clientCreatedAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory PendingTeacherAbsence.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PendingTeacherAbsence(
+      operationUuid: serializer.fromJson<String>(json['operationUuid']),
+      halaqaId: serializer.fromJson<int>(json['halaqaId']),
+      absenceDate: serializer.fromJson<DateTime>(json['absenceDate']),
+      reason: serializer.fromJson<String>(json['reason']),
+      status: serializer.fromJson<String>(json['status']),
+      attempts: serializer.fromJson<int>(json['attempts']),
+      lastError: serializer.fromJson<String?>(json['lastError']),
+      serverAbsenceId: serializer.fromJson<int?>(json['serverAbsenceId']),
+      clientCreatedAt: serializer.fromJson<DateTime>(json['clientCreatedAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'operationUuid': serializer.toJson<String>(operationUuid),
+      'halaqaId': serializer.toJson<int>(halaqaId),
+      'absenceDate': serializer.toJson<DateTime>(absenceDate),
+      'reason': serializer.toJson<String>(reason),
+      'status': serializer.toJson<String>(status),
+      'attempts': serializer.toJson<int>(attempts),
+      'lastError': serializer.toJson<String?>(lastError),
+      'serverAbsenceId': serializer.toJson<int?>(serverAbsenceId),
+      'clientCreatedAt': serializer.toJson<DateTime>(clientCreatedAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  PendingTeacherAbsence copyWith({
+    String? operationUuid,
+    int? halaqaId,
+    DateTime? absenceDate,
+    String? reason,
+    String? status,
+    int? attempts,
+    Value<String?> lastError = const Value.absent(),
+    Value<int?> serverAbsenceId = const Value.absent(),
+    DateTime? clientCreatedAt,
+    DateTime? updatedAt,
+  }) => PendingTeacherAbsence(
+    operationUuid: operationUuid ?? this.operationUuid,
+    halaqaId: halaqaId ?? this.halaqaId,
+    absenceDate: absenceDate ?? this.absenceDate,
+    reason: reason ?? this.reason,
+    status: status ?? this.status,
+    attempts: attempts ?? this.attempts,
+    lastError: lastError.present ? lastError.value : this.lastError,
+    serverAbsenceId: serverAbsenceId.present
+        ? serverAbsenceId.value
+        : this.serverAbsenceId,
+    clientCreatedAt: clientCreatedAt ?? this.clientCreatedAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  PendingTeacherAbsence copyWithCompanion(
+    PendingTeacherAbsencesCompanion data,
+  ) {
+    return PendingTeacherAbsence(
+      operationUuid: data.operationUuid.present
+          ? data.operationUuid.value
+          : this.operationUuid,
+      halaqaId: data.halaqaId.present ? data.halaqaId.value : this.halaqaId,
+      absenceDate: data.absenceDate.present
+          ? data.absenceDate.value
+          : this.absenceDate,
+      reason: data.reason.present ? data.reason.value : this.reason,
+      status: data.status.present ? data.status.value : this.status,
+      attempts: data.attempts.present ? data.attempts.value : this.attempts,
+      lastError: data.lastError.present ? data.lastError.value : this.lastError,
+      serverAbsenceId: data.serverAbsenceId.present
+          ? data.serverAbsenceId.value
+          : this.serverAbsenceId,
+      clientCreatedAt: data.clientCreatedAt.present
+          ? data.clientCreatedAt.value
+          : this.clientCreatedAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingTeacherAbsence(')
+          ..write('operationUuid: $operationUuid, ')
+          ..write('halaqaId: $halaqaId, ')
+          ..write('absenceDate: $absenceDate, ')
+          ..write('reason: $reason, ')
+          ..write('status: $status, ')
+          ..write('attempts: $attempts, ')
+          ..write('lastError: $lastError, ')
+          ..write('serverAbsenceId: $serverAbsenceId, ')
+          ..write('clientCreatedAt: $clientCreatedAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    operationUuid,
+    halaqaId,
+    absenceDate,
+    reason,
+    status,
+    attempts,
+    lastError,
+    serverAbsenceId,
+    clientCreatedAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PendingTeacherAbsence &&
+          other.operationUuid == this.operationUuid &&
+          other.halaqaId == this.halaqaId &&
+          other.absenceDate == this.absenceDate &&
+          other.reason == this.reason &&
+          other.status == this.status &&
+          other.attempts == this.attempts &&
+          other.lastError == this.lastError &&
+          other.serverAbsenceId == this.serverAbsenceId &&
+          other.clientCreatedAt == this.clientCreatedAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class PendingTeacherAbsencesCompanion
+    extends UpdateCompanion<PendingTeacherAbsence> {
+  final Value<String> operationUuid;
+  final Value<int> halaqaId;
+  final Value<DateTime> absenceDate;
+  final Value<String> reason;
+  final Value<String> status;
+  final Value<int> attempts;
+  final Value<String?> lastError;
+  final Value<int?> serverAbsenceId;
+  final Value<DateTime> clientCreatedAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const PendingTeacherAbsencesCompanion({
+    this.operationUuid = const Value.absent(),
+    this.halaqaId = const Value.absent(),
+    this.absenceDate = const Value.absent(),
+    this.reason = const Value.absent(),
+    this.status = const Value.absent(),
+    this.attempts = const Value.absent(),
+    this.lastError = const Value.absent(),
+    this.serverAbsenceId = const Value.absent(),
+    this.clientCreatedAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PendingTeacherAbsencesCompanion.insert({
+    required String operationUuid,
+    required int halaqaId,
+    required DateTime absenceDate,
+    required String reason,
+    this.status = const Value.absent(),
+    this.attempts = const Value.absent(),
+    this.lastError = const Value.absent(),
+    this.serverAbsenceId = const Value.absent(),
+    required DateTime clientCreatedAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : operationUuid = Value(operationUuid),
+       halaqaId = Value(halaqaId),
+       absenceDate = Value(absenceDate),
+       reason = Value(reason),
+       clientCreatedAt = Value(clientCreatedAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<PendingTeacherAbsence> custom({
+    Expression<String>? operationUuid,
+    Expression<int>? halaqaId,
+    Expression<DateTime>? absenceDate,
+    Expression<String>? reason,
+    Expression<String>? status,
+    Expression<int>? attempts,
+    Expression<String>? lastError,
+    Expression<int>? serverAbsenceId,
+    Expression<DateTime>? clientCreatedAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (operationUuid != null) 'operation_uuid': operationUuid,
+      if (halaqaId != null) 'halaqa_id': halaqaId,
+      if (absenceDate != null) 'absence_date': absenceDate,
+      if (reason != null) 'reason': reason,
+      if (status != null) 'status': status,
+      if (attempts != null) 'attempts': attempts,
+      if (lastError != null) 'last_error': lastError,
+      if (serverAbsenceId != null) 'server_absence_id': serverAbsenceId,
+      if (clientCreatedAt != null) 'client_created_at': clientCreatedAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PendingTeacherAbsencesCompanion copyWith({
+    Value<String>? operationUuid,
+    Value<int>? halaqaId,
+    Value<DateTime>? absenceDate,
+    Value<String>? reason,
+    Value<String>? status,
+    Value<int>? attempts,
+    Value<String?>? lastError,
+    Value<int?>? serverAbsenceId,
+    Value<DateTime>? clientCreatedAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return PendingTeacherAbsencesCompanion(
+      operationUuid: operationUuid ?? this.operationUuid,
+      halaqaId: halaqaId ?? this.halaqaId,
+      absenceDate: absenceDate ?? this.absenceDate,
+      reason: reason ?? this.reason,
+      status: status ?? this.status,
+      attempts: attempts ?? this.attempts,
+      lastError: lastError ?? this.lastError,
+      serverAbsenceId: serverAbsenceId ?? this.serverAbsenceId,
+      clientCreatedAt: clientCreatedAt ?? this.clientCreatedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (operationUuid.present) {
+      map['operation_uuid'] = Variable<String>(operationUuid.value);
+    }
+    if (halaqaId.present) {
+      map['halaqa_id'] = Variable<int>(halaqaId.value);
+    }
+    if (absenceDate.present) {
+      map['absence_date'] = Variable<DateTime>(absenceDate.value);
+    }
+    if (reason.present) {
+      map['reason'] = Variable<String>(reason.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (attempts.present) {
+      map['attempts'] = Variable<int>(attempts.value);
+    }
+    if (lastError.present) {
+      map['last_error'] = Variable<String>(lastError.value);
+    }
+    if (serverAbsenceId.present) {
+      map['server_absence_id'] = Variable<int>(serverAbsenceId.value);
+    }
+    if (clientCreatedAt.present) {
+      map['client_created_at'] = Variable<DateTime>(clientCreatedAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingTeacherAbsencesCompanion(')
+          ..write('operationUuid: $operationUuid, ')
+          ..write('halaqaId: $halaqaId, ')
+          ..write('absenceDate: $absenceDate, ')
+          ..write('reason: $reason, ')
+          ..write('status: $status, ')
+          ..write('attempts: $attempts, ')
+          ..write('lastError: $lastError, ')
+          ..write('serverAbsenceId: $serverAbsenceId, ')
+          ..write('clientCreatedAt: $clientCreatedAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $CachedTeacherProfilesTable extends CachedTeacherProfiles
     with TableInfo<$CachedTeacherProfilesTable, CachedTeacherProfile> {
   @override
@@ -3985,6 +5273,12 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CachedAyahsTable cachedAyahs = $CachedAyahsTable(this);
   late final $PendingDailyRecordsTable pendingDailyRecords =
       $PendingDailyRecordsTable(this);
+  late final $CachedTeacherAbsencesTable cachedTeacherAbsences =
+      $CachedTeacherAbsencesTable(this);
+  late final $CachedDailyRecordKeysTable cachedDailyRecordKeys =
+      $CachedDailyRecordKeysTable(this);
+  late final $PendingTeacherAbsencesTable pendingTeacherAbsences =
+      $PendingTeacherAbsencesTable(this);
   late final $CachedTeacherProfilesTable cachedTeacherProfiles =
       $CachedTeacherProfilesTable(this);
   late final $CachedStudentProfilesTable cachedStudentProfiles =
@@ -4004,6 +5298,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     cachedSurahs,
     cachedAyahs,
     pendingDailyRecords,
+    cachedTeacherAbsences,
+    cachedDailyRecordKeys,
+    pendingTeacherAbsences,
     cachedTeacherProfiles,
     cachedStudentProfiles,
     pendingStudentOperations,
@@ -5286,6 +6583,739 @@ typedef $$PendingDailyRecordsTableProcessedTableManager =
       PendingDailyRecord,
       PrefetchHooks Function()
     >;
+typedef $$CachedTeacherAbsencesTableCreateCompanionBuilder =
+    CachedTeacherAbsencesCompanion Function({
+      Value<int> id,
+      required int halaqaId,
+      required DateTime absenceDate,
+      required String reason,
+      Value<DateTime?> updatedAt,
+    });
+typedef $$CachedTeacherAbsencesTableUpdateCompanionBuilder =
+    CachedTeacherAbsencesCompanion Function({
+      Value<int> id,
+      Value<int> halaqaId,
+      Value<DateTime> absenceDate,
+      Value<String> reason,
+      Value<DateTime?> updatedAt,
+    });
+
+class $$CachedTeacherAbsencesTableFilterComposer
+    extends Composer<_$AppDatabase, $CachedTeacherAbsencesTable> {
+  $$CachedTeacherAbsencesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get halaqaId => $composableBuilder(
+    column: $table.halaqaId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get absenceDate => $composableBuilder(
+    column: $table.absenceDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CachedTeacherAbsencesTableOrderingComposer
+    extends Composer<_$AppDatabase, $CachedTeacherAbsencesTable> {
+  $$CachedTeacherAbsencesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get halaqaId => $composableBuilder(
+    column: $table.halaqaId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get absenceDate => $composableBuilder(
+    column: $table.absenceDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CachedTeacherAbsencesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CachedTeacherAbsencesTable> {
+  $$CachedTeacherAbsencesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get halaqaId =>
+      $composableBuilder(column: $table.halaqaId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get absenceDate => $composableBuilder(
+    column: $table.absenceDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get reason =>
+      $composableBuilder(column: $table.reason, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$CachedTeacherAbsencesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CachedTeacherAbsencesTable,
+          CachedTeacherAbsence,
+          $$CachedTeacherAbsencesTableFilterComposer,
+          $$CachedTeacherAbsencesTableOrderingComposer,
+          $$CachedTeacherAbsencesTableAnnotationComposer,
+          $$CachedTeacherAbsencesTableCreateCompanionBuilder,
+          $$CachedTeacherAbsencesTableUpdateCompanionBuilder,
+          (
+            CachedTeacherAbsence,
+            BaseReferences<
+              _$AppDatabase,
+              $CachedTeacherAbsencesTable,
+              CachedTeacherAbsence
+            >,
+          ),
+          CachedTeacherAbsence,
+          PrefetchHooks Function()
+        > {
+  $$CachedTeacherAbsencesTableTableManager(
+    _$AppDatabase db,
+    $CachedTeacherAbsencesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CachedTeacherAbsencesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$CachedTeacherAbsencesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$CachedTeacherAbsencesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> halaqaId = const Value.absent(),
+                Value<DateTime> absenceDate = const Value.absent(),
+                Value<String> reason = const Value.absent(),
+                Value<DateTime?> updatedAt = const Value.absent(),
+              }) => CachedTeacherAbsencesCompanion(
+                id: id,
+                halaqaId: halaqaId,
+                absenceDate: absenceDate,
+                reason: reason,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int halaqaId,
+                required DateTime absenceDate,
+                required String reason,
+                Value<DateTime?> updatedAt = const Value.absent(),
+              }) => CachedTeacherAbsencesCompanion.insert(
+                id: id,
+                halaqaId: halaqaId,
+                absenceDate: absenceDate,
+                reason: reason,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CachedTeacherAbsencesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CachedTeacherAbsencesTable,
+      CachedTeacherAbsence,
+      $$CachedTeacherAbsencesTableFilterComposer,
+      $$CachedTeacherAbsencesTableOrderingComposer,
+      $$CachedTeacherAbsencesTableAnnotationComposer,
+      $$CachedTeacherAbsencesTableCreateCompanionBuilder,
+      $$CachedTeacherAbsencesTableUpdateCompanionBuilder,
+      (
+        CachedTeacherAbsence,
+        BaseReferences<
+          _$AppDatabase,
+          $CachedTeacherAbsencesTable,
+          CachedTeacherAbsence
+        >,
+      ),
+      CachedTeacherAbsence,
+      PrefetchHooks Function()
+    >;
+typedef $$CachedDailyRecordKeysTableCreateCompanionBuilder =
+    CachedDailyRecordKeysCompanion Function({
+      Value<int> id,
+      required int studentId,
+      required int halaqaId,
+      required DateTime recordDate,
+    });
+typedef $$CachedDailyRecordKeysTableUpdateCompanionBuilder =
+    CachedDailyRecordKeysCompanion Function({
+      Value<int> id,
+      Value<int> studentId,
+      Value<int> halaqaId,
+      Value<DateTime> recordDate,
+    });
+
+class $$CachedDailyRecordKeysTableFilterComposer
+    extends Composer<_$AppDatabase, $CachedDailyRecordKeysTable> {
+  $$CachedDailyRecordKeysTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get studentId => $composableBuilder(
+    column: $table.studentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get halaqaId => $composableBuilder(
+    column: $table.halaqaId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get recordDate => $composableBuilder(
+    column: $table.recordDate,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CachedDailyRecordKeysTableOrderingComposer
+    extends Composer<_$AppDatabase, $CachedDailyRecordKeysTable> {
+  $$CachedDailyRecordKeysTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get studentId => $composableBuilder(
+    column: $table.studentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get halaqaId => $composableBuilder(
+    column: $table.halaqaId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get recordDate => $composableBuilder(
+    column: $table.recordDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CachedDailyRecordKeysTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CachedDailyRecordKeysTable> {
+  $$CachedDailyRecordKeysTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get studentId =>
+      $composableBuilder(column: $table.studentId, builder: (column) => column);
+
+  GeneratedColumn<int> get halaqaId =>
+      $composableBuilder(column: $table.halaqaId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get recordDate => $composableBuilder(
+    column: $table.recordDate,
+    builder: (column) => column,
+  );
+}
+
+class $$CachedDailyRecordKeysTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CachedDailyRecordKeysTable,
+          CachedDailyRecordKey,
+          $$CachedDailyRecordKeysTableFilterComposer,
+          $$CachedDailyRecordKeysTableOrderingComposer,
+          $$CachedDailyRecordKeysTableAnnotationComposer,
+          $$CachedDailyRecordKeysTableCreateCompanionBuilder,
+          $$CachedDailyRecordKeysTableUpdateCompanionBuilder,
+          (
+            CachedDailyRecordKey,
+            BaseReferences<
+              _$AppDatabase,
+              $CachedDailyRecordKeysTable,
+              CachedDailyRecordKey
+            >,
+          ),
+          CachedDailyRecordKey,
+          PrefetchHooks Function()
+        > {
+  $$CachedDailyRecordKeysTableTableManager(
+    _$AppDatabase db,
+    $CachedDailyRecordKeysTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CachedDailyRecordKeysTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$CachedDailyRecordKeysTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$CachedDailyRecordKeysTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> studentId = const Value.absent(),
+                Value<int> halaqaId = const Value.absent(),
+                Value<DateTime> recordDate = const Value.absent(),
+              }) => CachedDailyRecordKeysCompanion(
+                id: id,
+                studentId: studentId,
+                halaqaId: halaqaId,
+                recordDate: recordDate,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int studentId,
+                required int halaqaId,
+                required DateTime recordDate,
+              }) => CachedDailyRecordKeysCompanion.insert(
+                id: id,
+                studentId: studentId,
+                halaqaId: halaqaId,
+                recordDate: recordDate,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CachedDailyRecordKeysTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CachedDailyRecordKeysTable,
+      CachedDailyRecordKey,
+      $$CachedDailyRecordKeysTableFilterComposer,
+      $$CachedDailyRecordKeysTableOrderingComposer,
+      $$CachedDailyRecordKeysTableAnnotationComposer,
+      $$CachedDailyRecordKeysTableCreateCompanionBuilder,
+      $$CachedDailyRecordKeysTableUpdateCompanionBuilder,
+      (
+        CachedDailyRecordKey,
+        BaseReferences<
+          _$AppDatabase,
+          $CachedDailyRecordKeysTable,
+          CachedDailyRecordKey
+        >,
+      ),
+      CachedDailyRecordKey,
+      PrefetchHooks Function()
+    >;
+typedef $$PendingTeacherAbsencesTableCreateCompanionBuilder =
+    PendingTeacherAbsencesCompanion Function({
+      required String operationUuid,
+      required int halaqaId,
+      required DateTime absenceDate,
+      required String reason,
+      Value<String> status,
+      Value<int> attempts,
+      Value<String?> lastError,
+      Value<int?> serverAbsenceId,
+      required DateTime clientCreatedAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$PendingTeacherAbsencesTableUpdateCompanionBuilder =
+    PendingTeacherAbsencesCompanion Function({
+      Value<String> operationUuid,
+      Value<int> halaqaId,
+      Value<DateTime> absenceDate,
+      Value<String> reason,
+      Value<String> status,
+      Value<int> attempts,
+      Value<String?> lastError,
+      Value<int?> serverAbsenceId,
+      Value<DateTime> clientCreatedAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$PendingTeacherAbsencesTableFilterComposer
+    extends Composer<_$AppDatabase, $PendingTeacherAbsencesTable> {
+  $$PendingTeacherAbsencesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get operationUuid => $composableBuilder(
+    column: $table.operationUuid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get halaqaId => $composableBuilder(
+    column: $table.halaqaId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get absenceDate => $composableBuilder(
+    column: $table.absenceDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get attempts => $composableBuilder(
+    column: $table.attempts,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastError => $composableBuilder(
+    column: $table.lastError,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get serverAbsenceId => $composableBuilder(
+    column: $table.serverAbsenceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get clientCreatedAt => $composableBuilder(
+    column: $table.clientCreatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PendingTeacherAbsencesTableOrderingComposer
+    extends Composer<_$AppDatabase, $PendingTeacherAbsencesTable> {
+  $$PendingTeacherAbsencesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get operationUuid => $composableBuilder(
+    column: $table.operationUuid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get halaqaId => $composableBuilder(
+    column: $table.halaqaId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get absenceDate => $composableBuilder(
+    column: $table.absenceDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get attempts => $composableBuilder(
+    column: $table.attempts,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastError => $composableBuilder(
+    column: $table.lastError,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get serverAbsenceId => $composableBuilder(
+    column: $table.serverAbsenceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get clientCreatedAt => $composableBuilder(
+    column: $table.clientCreatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PendingTeacherAbsencesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PendingTeacherAbsencesTable> {
+  $$PendingTeacherAbsencesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get operationUuid => $composableBuilder(
+    column: $table.operationUuid,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get halaqaId =>
+      $composableBuilder(column: $table.halaqaId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get absenceDate => $composableBuilder(
+    column: $table.absenceDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get reason =>
+      $composableBuilder(column: $table.reason, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<int> get attempts =>
+      $composableBuilder(column: $table.attempts, builder: (column) => column);
+
+  GeneratedColumn<String> get lastError =>
+      $composableBuilder(column: $table.lastError, builder: (column) => column);
+
+  GeneratedColumn<int> get serverAbsenceId => $composableBuilder(
+    column: $table.serverAbsenceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get clientCreatedAt => $composableBuilder(
+    column: $table.clientCreatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$PendingTeacherAbsencesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PendingTeacherAbsencesTable,
+          PendingTeacherAbsence,
+          $$PendingTeacherAbsencesTableFilterComposer,
+          $$PendingTeacherAbsencesTableOrderingComposer,
+          $$PendingTeacherAbsencesTableAnnotationComposer,
+          $$PendingTeacherAbsencesTableCreateCompanionBuilder,
+          $$PendingTeacherAbsencesTableUpdateCompanionBuilder,
+          (
+            PendingTeacherAbsence,
+            BaseReferences<
+              _$AppDatabase,
+              $PendingTeacherAbsencesTable,
+              PendingTeacherAbsence
+            >,
+          ),
+          PendingTeacherAbsence,
+          PrefetchHooks Function()
+        > {
+  $$PendingTeacherAbsencesTableTableManager(
+    _$AppDatabase db,
+    $PendingTeacherAbsencesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PendingTeacherAbsencesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PendingTeacherAbsencesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PendingTeacherAbsencesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> operationUuid = const Value.absent(),
+                Value<int> halaqaId = const Value.absent(),
+                Value<DateTime> absenceDate = const Value.absent(),
+                Value<String> reason = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<int> attempts = const Value.absent(),
+                Value<String?> lastError = const Value.absent(),
+                Value<int?> serverAbsenceId = const Value.absent(),
+                Value<DateTime> clientCreatedAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PendingTeacherAbsencesCompanion(
+                operationUuid: operationUuid,
+                halaqaId: halaqaId,
+                absenceDate: absenceDate,
+                reason: reason,
+                status: status,
+                attempts: attempts,
+                lastError: lastError,
+                serverAbsenceId: serverAbsenceId,
+                clientCreatedAt: clientCreatedAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String operationUuid,
+                required int halaqaId,
+                required DateTime absenceDate,
+                required String reason,
+                Value<String> status = const Value.absent(),
+                Value<int> attempts = const Value.absent(),
+                Value<String?> lastError = const Value.absent(),
+                Value<int?> serverAbsenceId = const Value.absent(),
+                required DateTime clientCreatedAt,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => PendingTeacherAbsencesCompanion.insert(
+                operationUuid: operationUuid,
+                halaqaId: halaqaId,
+                absenceDate: absenceDate,
+                reason: reason,
+                status: status,
+                attempts: attempts,
+                lastError: lastError,
+                serverAbsenceId: serverAbsenceId,
+                clientCreatedAt: clientCreatedAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PendingTeacherAbsencesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PendingTeacherAbsencesTable,
+      PendingTeacherAbsence,
+      $$PendingTeacherAbsencesTableFilterComposer,
+      $$PendingTeacherAbsencesTableOrderingComposer,
+      $$PendingTeacherAbsencesTableAnnotationComposer,
+      $$PendingTeacherAbsencesTableCreateCompanionBuilder,
+      $$PendingTeacherAbsencesTableUpdateCompanionBuilder,
+      (
+        PendingTeacherAbsence,
+        BaseReferences<
+          _$AppDatabase,
+          $PendingTeacherAbsencesTable,
+          PendingTeacherAbsence
+        >,
+      ),
+      PendingTeacherAbsence,
+      PrefetchHooks Function()
+    >;
 typedef $$CachedTeacherProfilesTableCreateCompanionBuilder =
     CachedTeacherProfilesCompanion Function({
       Value<int> id,
@@ -6237,6 +8267,15 @@ class $AppDatabaseManager {
       $$CachedAyahsTableTableManager(_db, _db.cachedAyahs);
   $$PendingDailyRecordsTableTableManager get pendingDailyRecords =>
       $$PendingDailyRecordsTableTableManager(_db, _db.pendingDailyRecords);
+  $$CachedTeacherAbsencesTableTableManager get cachedTeacherAbsences =>
+      $$CachedTeacherAbsencesTableTableManager(_db, _db.cachedTeacherAbsences);
+  $$CachedDailyRecordKeysTableTableManager get cachedDailyRecordKeys =>
+      $$CachedDailyRecordKeysTableTableManager(_db, _db.cachedDailyRecordKeys);
+  $$PendingTeacherAbsencesTableTableManager get pendingTeacherAbsences =>
+      $$PendingTeacherAbsencesTableTableManager(
+        _db,
+        _db.pendingTeacherAbsences,
+      );
   $$CachedTeacherProfilesTableTableManager get cachedTeacherProfiles =>
       $$CachedTeacherProfilesTableTableManager(_db, _db.cachedTeacherProfiles);
   $$CachedStudentProfilesTableTableManager get cachedStudentProfiles =>

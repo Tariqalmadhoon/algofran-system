@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../core/database/app_database.dart';
 import '../core/network/api_client.dart';
+import '../core/notifications/daily_reminder_service.dart';
 import '../core/database/profile_snapshots.dart';
 import '../features/auth/data/session_repository.dart';
 import '../features/sync/data/sync_repository.dart';
@@ -25,6 +26,10 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 
 final apiClientProvider = Provider<ApiClient>(
   (ref) => ApiClient(ref.watch(secureStorageProvider)),
+);
+
+final dailyReminderServiceProvider = Provider<DailyReminderService>(
+  (ref) => DailyReminderService(ref.watch(databaseProvider)),
 );
 
 final sessionRepositoryProvider = Provider<SessionRepository>(
@@ -122,3 +127,18 @@ final studentStatusRecordDateProvider = StreamProvider<String?>(
 final outboxProvider = StreamProvider<List<PendingDailyRecord>>(
   (ref) => ref.watch(databaseProvider).watchOutbox(),
 );
+
+final teacherAbsencesProvider = StreamProvider<List<CachedTeacherAbsence>>(
+  (ref) => ref.watch(databaseProvider).watchTeacherAbsences(),
+);
+
+final pendingTeacherAbsencesProvider =
+    StreamProvider<List<PendingTeacherAbsence>>(
+      (ref) => ref.watch(databaseProvider).watchPendingTeacherAbsences(),
+    );
+
+final dailyRecordKeysProvider =
+    StreamProvider.family<List<CachedDailyRecordKey>, int>(
+      (ref, halaqaId) =>
+          ref.watch(databaseProvider).watchDailyRecordKeys(halaqaId),
+    );

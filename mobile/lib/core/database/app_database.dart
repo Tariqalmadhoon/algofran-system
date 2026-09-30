@@ -107,6 +107,43 @@ class PendingDailyRecords extends Table {
   Set<Column<Object>> get primaryKey => {operationUuid};
 }
 
+class CachedTeacherAbsences extends Table {
+  IntColumn get id => integer()();
+  IntColumn get halaqaId => integer()();
+  DateTimeColumn get absenceDate => dateTime()();
+  TextColumn get reason => text()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+class CachedDailyRecordKeys extends Table {
+  IntColumn get id => integer()();
+  IntColumn get studentId => integer()();
+  IntColumn get halaqaId => integer()();
+  DateTimeColumn get recordDate => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+class PendingTeacherAbsences extends Table {
+  TextColumn get operationUuid => text()();
+  IntColumn get halaqaId => integer()();
+  DateTimeColumn get absenceDate => dateTime()();
+  TextColumn get reason => text()();
+  TextColumn get status => text().withDefault(const Constant('pending'))();
+  IntColumn get attempts => integer().withDefault(const Constant(0))();
+  TextColumn get lastError => text().nullable()();
+  IntColumn get serverAbsenceId => integer().nullable()();
+  DateTimeColumn get clientCreatedAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {operationUuid};
+}
+
 class CachedTeacherProfiles extends Table {
   IntColumn get id => integer()();
   TextColumn get payloadJson => text()();
@@ -162,6 +199,9 @@ class LocalStudentDrafts extends Table {
     CachedSurahs,
     CachedAyahs,
     PendingDailyRecords,
+    CachedTeacherAbsences,
+    CachedDailyRecordKeys,
+    PendingTeacherAbsences,
     CachedTeacherProfiles,
     CachedStudentProfiles,
     PendingStudentOperations,
@@ -174,7 +214,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -192,6 +232,11 @@ class AppDatabase extends _$AppDatabase {
         await migrator.createTable(pendingStudentOperations);
         await migrator.createTable(localStudentDrafts);
       }
+      if (from < 4) {
+        await migrator.createTable(cachedTeacherAbsences);
+        await migrator.createTable(cachedDailyRecordKeys);
+        await migrator.createTable(pendingTeacherAbsences);
+      }
     },
   );
 
@@ -204,8 +249,41 @@ class AppDatabase extends _$AppDatabase {
       await delete(cachedSurahs).go();
       await delete(cachedStudentProfiles).go();
       await delete(cachedTeacherProfiles).go();
+      await delete(cachedTeacherAbsences).go();
+      await delete(cachedDailyRecordKeys).go();
 
       final updatedAt = DateTime.now().toUtc();
+
+      for (final rawAbsence
+          in data['teacher_absences'] as List<dynamic>? ?? const []) {
+        final absence = Map<String, dynamic>.from(rawAbsence as Map);
+        await into(cachedTeacherAbsences).insert(
+          CachedTeacherAbsencesCompanion.insert(
+            id: Value((absence['id'] as num).toInt()),
+            halaqaId: (absence['halaqa_id'] as num).toInt(),
+            absenceDate: DateTime.parse(absence['absence_date'] as String),
+            reason: absence['reason'] as String,
+            updatedAt: Value(
+              absence['updated_at'] == null
+                  ? null
+                  : DateTime.parse(absence['updated_at'] as String).toUtc(),
+            ),
+          ),
+        );
+      }
+
+      for (final rawRecord
+          in data['daily_record_keys'] as List<dynamic>? ?? const []) {
+        final record = Map<String, dynamic>.from(rawRecord as Map);
+        await into(cachedDailyRecordKeys).insert(
+          CachedDailyRecordKeysCompanion.insert(
+            id: Value((record['id'] as num).toInt()),
+            studentId: (record['student_id'] as num).toInt(),
+            halaqaId: (record['halaqa_id'] as num).toInt(),
+            recordDate: DateTime.parse(record['record_date'] as String),
+          ),
+        );
+      }
       final teacherPayload = data['teacher'];
       if (teacherPayload is Map) {
         final teacher = Map<String, dynamic>.from(teacherPayload);
@@ -346,6 +424,24 @@ class AppDatabase extends _$AppDatabase {
   Stream<List<PendingDailyRecord>> watchOutbox() {
     return (select(
       pendingDailyRecords,
+    )..orderBy([(row) => OrderingTerm.desc(row.clientCreatedAt)])).watch();
+  }
+
+  Stream<List<CachedTeacherAbsence>> watchTeacherAbsences() {
+    return (select(
+      cachedTeacherAbsences,
+    )..orderBy([(row) => OrderingTerm.desc(row.absenceDate)])).watch();
+  }
+
+  Stream<List<CachedDailyRecordKey>> watchDailyRecordKeys(int halaqaId) {
+    return (select(
+      cachedDailyRecordKeys,
+    )..where((row) => row.halaqaId.equals(halaqaId))).watch();
+  }
+
+  Stream<List<PendingTeacherAbsence>> watchPendingTeacherAbsences() {
+    return (select(
+      pendingTeacherAbsences,
     )..orderBy([(row) => OrderingTerm.desc(row.clientCreatedAt)])).watch();
   }
 
@@ -670,6 +766,24 @@ class AppDatabase extends _$AppDatabase {
     required Map<String, dynamic> payload,
   }) async {
     final now = DateTime.now().toUtc();
+    final officialAbsences = await (select(
+      cachedTeacherAbsences,
+    )..where((row) => row.halaqaId.equals(halaqaId))).get();
+    final pendingAbsences =
+        await (select(pendingTeacherAbsences)..where(
+              (row) =>
+                  row.halaqaId.equals(halaqaId) &
+                  row.status.isIn(['pending', 'syncing', 'failed', 'synced']),
+            ))
+            .get();
+    if (officialAbsences.any(
+          (absence) => isSameRecordDate(absence.absenceDate, recordDate),
+        ) ||
+        pendingAbsences.any(
+          (absence) => isSameRecordDate(absence.absenceDate, recordDate),
+        )) {
+      throw StateError('teacher_absent');
+    }
     await into(pendingDailyRecords).insert(
       PendingDailyRecordsCompanion.insert(
         operationUuid: operationUuid,
@@ -682,6 +796,140 @@ class AppDatabase extends _$AppDatabase {
         updatedAt: now,
       ),
     );
+  }
+
+  Future<void> queueTeacherAbsence({
+    required String operationUuid,
+    required int halaqaId,
+    required DateTime absenceDate,
+    required String reason,
+  }) async {
+    final studentRecords =
+        await (select(pendingDailyRecords)..where(
+              (row) =>
+                  row.halaqaId.equals(halaqaId) &
+                  row.status.isIn(['pending', 'syncing', 'failed', 'synced']),
+            ))
+            .get();
+    if (studentRecords.any(
+      (record) => isSameRecordDate(record.recordDate, absenceDate),
+    )) {
+      throw StateError('student_records_exist');
+    }
+
+    final now = DateTime.now().toUtc();
+    await into(pendingTeacherAbsences).insert(
+      PendingTeacherAbsencesCompanion.insert(
+        operationUuid: operationUuid,
+        halaqaId: halaqaId,
+        absenceDate: absenceDate,
+        reason: reason.trim(),
+        clientCreatedAt: now,
+        updatedAt: now,
+      ),
+    );
+  }
+
+  Future<List<PendingTeacherAbsence>> teacherAbsencesToSync({int limit = 50}) {
+    return (select(pendingTeacherAbsences)
+          ..where((row) => row.status.isIn(['pending', 'syncing', 'failed']))
+          ..orderBy([(row) => OrderingTerm.asc(row.clientCreatedAt)])
+          ..limit(limit))
+        .get();
+  }
+
+  Future<void> markTeacherAbsencesSending(List<String> operationUuids) async {
+    if (operationUuids.isEmpty) return;
+    final now = DateTime.now().toUtc();
+    for (final uuid in operationUuids) {
+      final row = await (select(
+        pendingTeacherAbsences,
+      )..where((item) => item.operationUuid.equals(uuid))).getSingle();
+      await (update(
+        pendingTeacherAbsences,
+      )..where((item) => item.operationUuid.equals(uuid))).write(
+        PendingTeacherAbsencesCompanion(
+          status: const Value('syncing'),
+          attempts: Value(row.attempts + 1),
+          lastError: const Value(null),
+          updatedAt: Value(now),
+        ),
+      );
+    }
+  }
+
+  Future<void> applyTeacherAbsenceSyncResult(
+    String operationUuid,
+    Map<String, dynamic> result,
+  ) async {
+    final queued =
+        await (select(pendingTeacherAbsences)
+              ..where((row) => row.operationUuid.equals(operationUuid)))
+            .getSingleOrNull();
+    if (queued == null) return;
+
+    final status = result['status'] as String? ?? 'failed';
+    final localStatus = switch (status) {
+      'accepted' || 'already_processed' => 'synced',
+      'conflict' => 'conflict',
+      'rejected' => 'rejected',
+      _ => 'failed',
+    };
+    final rawAbsence = result['teacher_absence'];
+    final absence = rawAbsence is Map
+        ? Map<String, dynamic>.from(rawAbsence)
+        : null;
+    final error = result['error'] is Map
+        ? Map<String, dynamic>.from(result['error'] as Map)
+        : const <String, dynamic>{};
+
+    await transaction(() async {
+      if (localStatus == 'synced' && absence != null) {
+        await into(cachedTeacherAbsences).insertOnConflictUpdate(
+          CachedTeacherAbsencesCompanion.insert(
+            id: Value((absence['id'] as num).toInt()),
+            halaqaId: (absence['halaqa_id'] as num).toInt(),
+            absenceDate: DateTime.parse(absence['absence_date'] as String),
+            reason: absence['reason'] as String,
+            updatedAt: Value(
+              absence['updated_at'] == null
+                  ? null
+                  : DateTime.parse(absence['updated_at'] as String).toUtc(),
+            ),
+          ),
+        );
+      }
+      await (update(
+        pendingTeacherAbsences,
+      )..where((row) => row.operationUuid.equals(operationUuid))).write(
+        PendingTeacherAbsencesCompanion(
+          status: Value(localStatus),
+          serverAbsenceId: Value(
+            absence?['id'] is num ? (absence!['id'] as num).toInt() : null,
+          ),
+          lastError: Value(error['message']?.toString()),
+          updatedAt: Value(DateTime.now().toUtc()),
+        ),
+      );
+    });
+  }
+
+  Future<void> returnTeacherAbsencesToPending(String message) async {
+    await (update(
+      pendingTeacherAbsences,
+    )..where((row) => row.status.equals('syncing'))).write(
+      PendingTeacherAbsencesCompanion(
+        status: const Value('failed'),
+        lastError: Value(message),
+        updatedAt: Value(DateTime.now().toUtc()),
+      ),
+    );
+  }
+
+  Future<void> dismissTeacherAbsenceOperation(String operationUuid) async {
+    await (delete(
+      pendingTeacherAbsences,
+    )..where((row) => row.operationUuid.equals(operationUuid))).go();
   }
 
   Future<List<PendingDailyRecord>> recordsToSync({int limit = 50}) {
@@ -846,6 +1094,16 @@ class AppDatabase extends _$AppDatabase {
         record?['id'] as int?,
         queued.recordDate,
       );
+      if (record?['id'] is int) {
+        await into(cachedDailyRecordKeys).insertOnConflictUpdate(
+          CachedDailyRecordKeysCompanion.insert(
+            id: Value(record!['id'] as int),
+            studentId: queued.studentId,
+            halaqaId: queued.halaqaId,
+            recordDate: queued.recordDate,
+          ),
+        );
+      }
     }
   }
 
@@ -923,6 +1181,61 @@ class AppDatabase extends _$AppDatabase {
         .then((row) => row?.value);
   }
 
+  Future<bool> isDailyWorkComplete(DateTime date) async {
+    final halaqas = await select(cachedHalaqas).get();
+    if (halaqas.isEmpty) return false;
+
+    final officialAbsences = await select(cachedTeacherAbsences).get();
+    final pendingAbsences =
+        await (select(pendingTeacherAbsences)..where(
+              (row) =>
+                  row.status.isIn(['pending', 'syncing', 'failed', 'synced']),
+            ))
+            .get();
+    final officialRecords = await select(cachedDailyRecordKeys).get();
+    final localRecords =
+        await (select(pendingDailyRecords)..where(
+              (row) =>
+                  row.status.isIn(['pending', 'syncing', 'failed', 'synced']),
+            ))
+            .get();
+
+    for (final halaqa in halaqas) {
+      final absent =
+          officialAbsences.any(
+            (absence) =>
+                absence.halaqaId == halaqa.id &&
+                isSameRecordDate(absence.absenceDate, date),
+          ) ||
+          pendingAbsences.any(
+            (absence) =>
+                absence.halaqaId == halaqa.id &&
+                isSameRecordDate(absence.absenceDate, date),
+          );
+      if (absent) continue;
+
+      final students = await (select(
+        cachedStudents,
+      )..where((student) => student.halaqaId.equals(halaqa.id))).get();
+      for (final student in students) {
+        final recorded =
+            officialRecords.any(
+              (record) =>
+                  record.studentId == student.id &&
+                  isSameRecordDate(record.recordDate, date),
+            ) ||
+            localRecords.any(
+              (record) =>
+                  record.studentId == student.id &&
+                  isSameRecordDate(record.recordDate, date),
+            );
+        if (!recorded) return false;
+      }
+    }
+
+    return true;
+  }
+
   Future<void> setSetting(String key, String? value) {
     return into(appSettings).insertOnConflictUpdate(
       AppSettingsCompanion.insert(key: key, value: Value(value)),
@@ -932,12 +1245,15 @@ class AppDatabase extends _$AppDatabase {
   Future<void> clearSessionData() async {
     await transaction(() async {
       await delete(pendingDailyRecords).go();
+      await delete(pendingTeacherAbsences).go();
       await delete(cachedStudents).go();
       await delete(cachedHalaqas).go();
       await delete(cachedAyahs).go();
       await delete(cachedSurahs).go();
       await delete(cachedStudentProfiles).go();
       await delete(cachedTeacherProfiles).go();
+      await delete(cachedTeacherAbsences).go();
+      await delete(cachedDailyRecordKeys).go();
       await delete(pendingStudentOperations).go();
       await delete(localStudentDrafts).go();
       await delete(appSettings).go();

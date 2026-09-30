@@ -72,6 +72,8 @@ Route::prefix('v1')->middleware(['throttle:api', AddApiVersionHeader::class])->g
                 Route::get('/sync/changes', [MobileSyncController::class, 'changes']);
                 Route::post('/sync/daily-records', [MobileSyncController::class, 'push'])
                     ->middleware('abilities:mobile:sync');
+                Route::post('/sync/teacher-absences', [MobileSyncController::class, 'teacherAbsences'])
+                    ->middleware('abilities:mobile:sync');
                 Route::post('/sync/student-operations', [MobileSyncController::class, 'students'])
                     ->middleware('abilities:mobile:sync');
             });

@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Actions\Recitations\RecordStudentDailyRecordAction;
+use App\Actions\Recitations\RecordTeacherAbsenceAction;
 use App\Enums\AttendanceStatus;
 use App\Enums\EvaluationRating;
 use App\Enums\RecitationType;
@@ -12,6 +13,7 @@ use App\Models\QuranAyah;
 use App\Models\QuranSurah;
 use App\Models\ReportExport;
 use App\Models\Student;
+use App\Models\TeacherAbsence;
 use App\Models\TeacherProfile;
 use App\Services\ReportExportService;
 use Carbon\Carbon;
@@ -49,6 +51,10 @@ class TeacherDailyRecorder extends Component
 
     public string $notes = '';
 
+    public string $teacherAbsenceReason = '';
+
+    public bool $showTeacherAbsenceForm = false;
+
     public array $items = [];
 
     public bool $showExportPanel = false;
@@ -83,6 +89,8 @@ class TeacherDailyRecorder extends Component
         $this->studentSearch = '';
         $this->closeStudentHistory();
         $this->resetRecorder();
+        $this->teacherAbsenceReason = '';
+        $this->showTeacherAbsenceForm = false;
         $this->resetValidation();
     }
 
@@ -104,6 +112,8 @@ class TeacherDailyRecorder extends Component
         $this->studentSearch = '';
         $this->closeStudentHistory();
         $this->resetRecorder();
+        $this->teacherAbsenceReason = '';
+        $this->showTeacherAbsenceForm = false;
         $this->resetValidation();
     }
 
@@ -180,6 +190,12 @@ class TeacherDailyRecorder extends Component
     {
         $this->resetValidation();
 
+        if ($this->selectedTeacherAbsence()) {
+            $this->addError('studentId', 'المحفّظ مسجّل غائبًا عن هذه الحلقة في التاريخ المحدد؛ لا يمكن تسجيل حفظ للطلاب.');
+
+            return;
+        }
+
         if ($this->halaqaId === '' || $this->recordDate === '') {
             $this->addError('studentId', 'اختر الحلقة والتاريخ أولًا.');
 
@@ -214,6 +230,44 @@ class TeacherDailyRecorder extends Component
     {
         $this->resetRecorder();
         $this->resetValidation();
+    }
+
+    public function recordTeacherAbsence(RecordTeacherAbsenceAction $recordAbsence): void
+    {
+        $data = $this->validate([
+            'recordDate' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'halaqaId' => ['required', 'exists:halaqas,id'],
+            'teacherAbsenceReason' => ['required', 'string', 'max:1000'],
+        ], [], [
+            'recordDate' => 'تاريخ الغياب',
+            'halaqaId' => 'الحلقة',
+            'teacherAbsenceReason' => 'سبب غياب المحفّظ',
+        ]);
+
+        $recordAbsence->execute(
+            Halaqa::query()->findOrFail($data['halaqaId']),
+            $this->authenticatedTeacherProfile(),
+            $data['recordDate'],
+            $data['teacherAbsenceReason'],
+            auth()->user(),
+        );
+
+        $this->resetRecorder();
+        $this->showTeacherAbsenceForm = false;
+        session()->flash('success', 'تم تسجيل غياب المحفّظ وإيقاف تسجيل حفظ الطلاب لهذه الحلقة في التاريخ المحدد.');
+    }
+
+    public function removeTeacherAbsence(RecordTeacherAbsenceAction $recordAbsence): void
+    {
+        $absence = $this->selectedTeacherAbsence();
+        if (! $absence) {
+            return;
+        }
+
+        $recordAbsence->remove($absence, auth()->user());
+        $this->teacherAbsenceReason = '';
+        $this->showTeacherAbsenceForm = false;
+        session()->flash('success', 'تم إلغاء غياب المحفّظ، ويمكن الآن تسجيل الطلاب لهذا التاريخ.');
     }
 
     public function showStudentHistory(int $studentId): void
@@ -505,6 +559,7 @@ class TeacherDailyRecorder extends Component
     public function render(): View
     {
         $halaqas = $this->assignedHalaqas();
+        $teacherAbsence = $this->selectedTeacherAbsence();
         $hasAssignedHalaqa = $halaqas->contains('id', (int) $this->halaqaId);
         $allStudents = Student::query()
             ->when($hasAssignedHalaqa, fn ($query) => $query->whereHas('enrollments', function ($enrollments) {
@@ -573,6 +628,7 @@ class TeacherDailyRecorder extends Component
 
         return view('livewire.teacher-daily-recorder', [
             'halaqas' => $halaqas,
+            'teacherAbsence' => $teacherAbsence,
             'students' => $students,
             'selectedStudent' => $allStudents->firstWhere('id', (int) $this->studentId),
             'historyStudent' => $historyStudent,
@@ -609,6 +665,19 @@ class TeacherDailyRecorder extends Component
             })
             ->orderBy('name')
             ->get(['id', 'name']);
+    }
+
+    private function selectedTeacherAbsence(): ?TeacherAbsence
+    {
+        if ($this->halaqaId === '' || $this->recordDate === '' || ! isset($this->teacherProfileId)) {
+            return null;
+        }
+
+        return TeacherAbsence::query()
+            ->where('teacher_profile_id', $this->teacherProfileId)
+            ->where('halaqa_id', (int) $this->halaqaId)
+            ->whereDate('absence_date', $this->recordDate)
+            ->first();
     }
 
     private function authenticatedTeacherProfile(bool $rejectIdentityChange = true): TeacherProfile

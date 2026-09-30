@@ -103,7 +103,7 @@ void main() {
   );
 
   test(
-    'schema v3 caches profiles while a bootstrap refresh preserves outbox',
+    'schema v4 caches profiles while a bootstrap refresh preserves outbox',
     () async {
       await database.queueDailyRecord(
         operationUuid: '4cad2261-bdb5-4f39-9400-4c767a51acd2',

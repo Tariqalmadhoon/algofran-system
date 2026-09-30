@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../app/app_theme.dart';
 import '../../../app/providers.dart';
@@ -21,10 +22,101 @@ class HalaqaStudentsScreen extends ConsumerStatefulWidget {
 
 class _HalaqaStudentsScreenState extends ConsumerState<HalaqaStudentsScreen> {
   String _search = '';
+  DateTime _recordDate = DateTime.now();
+
+  Future<void> _pickRecordDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _recordDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null && mounted) {
+      setState(() => _recordDate = picked);
+    }
+  }
+
+  Future<void> _recordTeacherAbsence() async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.event_busy_rounded, color: Color(0xFF9A2D25)),
+        title: const Text('تسجيل غياب المحفّظ'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'سيُوقف تسجيل حفظ جميع طلاب الحلقة بتاريخ ${DateFormat('yyyy/MM/dd').format(_recordDate)}.',
+              style: const TextStyle(height: 1.5),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              maxLength: 1000,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'سبب الغياب',
+                hintText: 'مثال: ظرف صحي أو إجازة معتمدة',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('رجوع'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) Navigator.pop(dialogContext, value);
+            },
+            child: const Text('تأكيد الغياب'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (reason == null || !mounted) return;
+
+    try {
+      await ref
+          .read(syncRepositoryProvider)
+          .queueTeacherAbsence(
+            halaqaId: widget.halaqa.id,
+            absenceDate: _recordDate,
+            reason: reason,
+          );
+      await ref.read(dailyReminderServiceProvider).refreshSchedule();
+      ref.read(appControllerProvider.notifier).syncNow(silent: true);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'تم حفظ غياب المحفّظ على الجهاز، وسيُعتمد تلقائيًا عند توفر الإنترنت.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } on StateError {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'يوجد سجل طالب محفوظ لهذا اليوم؛ لا يمكن تسجيل غياب المحفّظ بعده.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final currentRecordDate = DateTime.now();
     final students = ref.watch(studentsProvider(widget.halaqa.id));
     final drafts =
         ref.watch(studentDraftsProvider(widget.halaqa.id)).valueOrNull ??
@@ -37,6 +129,42 @@ class _HalaqaStudentsScreenState extends ConsumerState<HalaqaStudentsScreen> {
         .valueOrNull;
     final outbox =
         ref.watch(outboxProvider).valueOrNull ?? const <PendingDailyRecord>[];
+    final recordKeys =
+        ref.watch(dailyRecordKeysProvider(widget.halaqa.id)).valueOrNull ??
+        const <CachedDailyRecordKey>[];
+    final officialAbsences =
+        ref.watch(teacherAbsencesProvider).valueOrNull ??
+        const <CachedTeacherAbsence>[];
+    final pendingAbsences =
+        ref.watch(pendingTeacherAbsencesProvider).valueOrNull ??
+        const <PendingTeacherAbsence>[];
+    String? absenceReason;
+    var absencePending = false;
+    for (final absence in officialAbsences) {
+      if (absence.halaqaId == widget.halaqa.id &&
+          isSameRecordDate(absence.absenceDate, _recordDate)) {
+        absenceReason = absence.reason;
+        break;
+      }
+    }
+    if (absenceReason == null) {
+      for (final absence in pendingAbsences) {
+        if (absence.halaqaId == widget.halaqa.id &&
+            isSameRecordDate(absence.absenceDate, _recordDate) &&
+            [
+              'pending',
+              'syncing',
+              'failed',
+              'synced',
+            ].contains(absence.status)) {
+          absenceReason = absence.reason;
+          absencePending = absence.status != 'synced';
+          break;
+        }
+      }
+    }
+    final teacherAbsent = absenceReason != null;
+    final isToday = isSameRecordDate(_recordDate, DateTime.now());
     return Scaffold(
       appBar: AppBar(
         title: Column(
@@ -68,6 +196,90 @@ class _HalaqaStudentsScreenState extends ConsumerState<HalaqaStudentsScreen> {
       ),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 4, 18, 10),
+            child: Card(
+              color: teacherAbsent
+                  ? const Color(0xFFFFF1F0)
+                  : isToday
+                  ? const Color(0xFFF0FAF5)
+                  : const Color(0xFFFFF8E7),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('اليوم'),
+                          selected: isToday,
+                          onSelected: (_) =>
+                              setState(() => _recordDate = DateTime.now()),
+                        ),
+                        ChoiceChip(
+                          label: const Text('أمس'),
+                          selected: isSameRecordDate(
+                            _recordDate,
+                            DateTime.now().subtract(const Duration(days: 1)),
+                          ),
+                          onSelected: (_) => setState(
+                            () => _recordDate = DateTime.now().subtract(
+                              const Duration(days: 1),
+                            ),
+                          ),
+                        ),
+                        ActionChip(
+                          avatar: const Icon(
+                            Icons.calendar_month_rounded,
+                            size: 18,
+                          ),
+                          label: Text(
+                            DateFormat('yyyy/MM/dd').format(_recordDate),
+                          ),
+                          onPressed: _pickRecordDate,
+                        ),
+                        if (!teacherAbsent)
+                          ActionChip(
+                            avatar: const Icon(
+                              Icons.event_busy_rounded,
+                              size: 18,
+                            ),
+                            label: const Text('غياب المحفّظ'),
+                            onPressed: _recordTeacherAbsence,
+                          ),
+                      ],
+                    ),
+                    if (!isToday && !teacherAbsent) ...[
+                      const SizedBox(height: 9),
+                      const Text(
+                        'وضع تسجيل سابق: ستُنسب الجلسات إلى هذا التاريخ عند المزامنة.',
+                        style: TextStyle(
+                          color: Color(0xFF8A6500),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                    if (teacherAbsent) ...[
+                      const SizedBox(height: 9),
+                      Text(
+                        'المحفّظ غائب — $absenceReason${absencePending ? ' (بانتظار المزامنة)' : ''}',
+                        style: const TextStyle(
+                          color: Color(0xFF9A2D25),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
             child: TextField(
@@ -109,14 +321,19 @@ class _HalaqaStudentsScreenState extends ConsumerState<HalaqaStudentsScreen> {
                           (item) => item.belongsToStudentOn(
                             student.serverId,
                             student.clientUuid,
-                            currentRecordDate,
+                            _recordDate,
                           ),
                         )
                         .toList();
                     final recordedOnCurrentDate =
-                        student.recordedToday &&
-                        studentStatusRecordDate ==
-                            recordDateKey(currentRecordDate);
+                        recordKeys.any(
+                          (record) =>
+                              record.studentId == student.serverId &&
+                              isSameRecordDate(record.recordDate, _recordDate),
+                        ) ||
+                        (student.recordedToday &&
+                            studentStatusRecordDate ==
+                                recordDateKey(_recordDate));
                     final pending = localRecords.any(
                       (item) => [
                         'pending',
@@ -132,6 +349,8 @@ class _HalaqaStudentsScreenState extends ConsumerState<HalaqaStudentsScreen> {
                       recordedOnCurrentDate: recordedOnCurrentDate,
                       pending: pending,
                       conflict: conflict,
+                      teacherAbsent: teacherAbsent,
+                      isToday: isToday,
                       animationIndex: index,
                       onTap: () {
                         Navigator.of(context).push(
@@ -144,9 +363,14 @@ class _HalaqaStudentsScreenState extends ConsumerState<HalaqaStudentsScreen> {
                         );
                       },
                       onRecord: () {
-                        if (recordedOnCurrentDate || pending || conflict) {
+                        if (teacherAbsent ||
+                            recordedOnCurrentDate ||
+                            pending ||
+                            conflict) {
                           final message = recordedOnCurrentDate
-                              ? 'تم اعتماد سجل هذا الطالب اليوم.'
+                              ? 'تم اعتماد سجل هذا الطالب في التاريخ المحدد.'
+                              : teacherAbsent
+                              ? 'تسجيل الطلاب متوقف لأن المحفّظ غائب في هذا التاريخ.'
                               : conflict
                               ? 'يوجد تعارض لهذا الطالب؛ راجعه من مركز المزامنة.'
                               : 'السجل محفوظ على الجهاز وبانتظار المزامنة.';
@@ -163,6 +387,7 @@ class _HalaqaStudentsScreenState extends ConsumerState<HalaqaStudentsScreen> {
                             builder: (_) => RecordDailyScreen(
                               halaqa: widget.halaqa,
                               student: student,
+                              initialRecordDate: _recordDate,
                             ),
                           ),
                         );
@@ -185,6 +410,8 @@ class _StudentCard extends StatelessWidget {
     required this.recordedOnCurrentDate,
     required this.pending,
     required this.conflict,
+    required this.teacherAbsent,
+    required this.isToday,
     required this.animationIndex,
     required this.onTap,
     required this.onRecord,
@@ -194,19 +421,31 @@ class _StudentCard extends StatelessWidget {
   final bool recordedOnCurrentDate;
   final bool pending;
   final bool conflict;
+  final bool teacherAbsent;
+  final bool isToday;
   final int animationIndex;
   final VoidCallback onTap;
   final VoidCallback onRecord;
 
   @override
   Widget build(BuildContext context) {
-    final status = recordedOnCurrentDate
-        ? (Icons.verified_rounded, const Color(0xFF167A57), 'تم اليوم')
+    final status = teacherAbsent
+        ? (Icons.block_rounded, const Color(0xFF9A2D25), 'متوقف')
+        : recordedOnCurrentDate
+        ? (
+            Icons.verified_rounded,
+            const Color(0xFF167A57),
+            isToday ? 'تم اليوم' : 'تم التسجيل',
+          )
         : conflict
         ? (Icons.warning_amber_rounded, const Color(0xFF9B6500), 'تعارض')
         : pending
         ? (Icons.cloud_upload_outlined, const Color(0xFF2766A5), 'محفوظ محليًا')
-        : (Icons.edit_calendar_rounded, AppTheme.emerald, 'تسجيل الآن');
+        : (
+            Icons.edit_calendar_rounded,
+            AppTheme.emerald,
+            isToday ? 'تسجيل الآن' : 'تسجيل سابق',
+          );
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
       duration: Duration(milliseconds: 280 + (animationIndex.clamp(0, 8) * 45)),

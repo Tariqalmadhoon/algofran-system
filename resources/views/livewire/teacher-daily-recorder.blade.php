@@ -112,6 +112,40 @@
         @endif
     </section>
 
+    <section @class(['panel transition', '!border-rose-200 !bg-rose-50/40' => $teacherAbsence, '!border-amber-200 !bg-amber-50/30' => ! $teacherAbsence])>
+        @if($teacherAbsence)
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div class="flex items-start gap-3">
+                    <span class="grid size-11 shrink-0 place-items-center rounded-2xl bg-rose-100 text-rose-700">
+                        <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3m8-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/><path d="m9 14 6 0m-3-3v6"/></svg>
+                    </span>
+                    <div>
+                        <p class="text-sm font-black text-rose-900">المحفّظ غائب عن الحلقة في هذا التاريخ</p>
+                        <p class="mt-1 text-sm leading-6 text-rose-800">{{ $teacherAbsence->reason }}</p>
+                        <p class="mt-1 text-xs text-rose-600">تم إيقاف تسجيل الحضور والحفظ لجميع طلاب الحلقة منعًا لإنشاء سجلات غير صحيحة.</p>
+                    </div>
+                </div>
+                <button wire:click="removeTeacherAbsence" wire:confirm="هل تريد إلغاء تسجيل غياب المحفّظ والسماح بتسجيل الطلاب؟" type="button" class="btn-secondary shrink-0 border-rose-200 text-rose-700 hover:bg-rose-50">إلغاء حالة الغياب</button>
+            </div>
+        @else
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div class="flex items-start gap-3">
+                    <span class="grid size-11 shrink-0 place-items-center rounded-2xl bg-amber-100 text-amber-800">
+                        <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                    </span>
+                    <div><p class="text-sm font-black text-slate-800">هل المحفّظ غائب عن الحلقة؟</p><p class="mt-1 text-xs leading-5 text-slate-500">سجّل الغياب وسببه مرة واحدة، وسيمنع النظام تسجيل أي حفظ للطلاب في هذا اليوم.</p></div>
+                </div>
+                <button wire:click="$toggle('showTeacherAbsenceForm')" type="button" class="btn-secondary shrink-0">تسجيل غياب المحفّظ</button>
+            </div>
+            @if($showTeacherAbsenceForm)
+                <div class="mt-4 grid gap-3 rounded-2xl border border-amber-200 bg-white p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                    <label><span class="form-label">سبب الغياب</span><textarea wire:model="teacherAbsenceReason" rows="2" maxlength="1000" class="form-input" placeholder="مثال: ظرف صحي أو إجازة معتمدة"></textarea><x-input-error :messages="$errors->get('teacherAbsenceReason')" /></label>
+                    <button wire:click="recordTeacherAbsence" wire:loading.attr="disabled" wire:target="recordTeacherAbsence" type="button" class="btn-primary">تأكيد الغياب وإيقاف التسجيل</button>
+                </div>
+            @endif
+        @endif
+    </section>
+
     <section class="panel">
         <div class="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div class="flex items-center gap-3">
@@ -131,6 +165,12 @@
             <span class="rounded-full bg-amber-50 px-3 py-1.5 text-amber-700">بانتظارك {{ $studentStats['waiting'] }}</span>
         </div>
 
+        @if($teacherAbsence)
+            <div class="rounded-2xl border border-dashed border-rose-200 bg-rose-50/60 px-5 py-10 text-center">
+                <p class="font-black text-rose-900">تسجيل الطلاب متوقف لهذا التاريخ</p>
+                <p class="mt-2 text-sm text-rose-700">سبب التوقف: {{ $teacherAbsence->reason }}</p>
+            </div>
+        @else
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" wire:loading.class="opacity-60" wire:target="recordDate,halaqaId,studentSearch,selectStudent">
             @forelse($students as $student)
                 <article
@@ -165,6 +205,7 @@
                 </div>
             @endforelse
         </div>
+        @endif
         <x-input-error :messages="$errors->get('studentId')" />
         <x-input-error :messages="$errors->get('historyStudentId')" />
     </section>
