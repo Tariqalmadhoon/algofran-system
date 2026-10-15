@@ -24,7 +24,7 @@
         <div>
             <label class="form-label" for="password">كلمة المرور الجديدة</label>
             <div class="relative">
-                <input class="form-input pl-12" id="password" name="password" x-model="password" x-bind:type="showPassword ? 'text' : 'password'" autocomplete="new-password" required>
+                <input class="form-input pl-12" id="password" name="password" type="password" x-model="password" x-bind:type="showPassword ? 'text' : 'password'" autocomplete="new-password" required>
                 <button type="button" class="absolute inset-y-0 left-2 grid w-9 place-items-center text-slate-400 hover:text-emerald-700" x-on:click="showPassword = !showPassword" x-bind:aria-label="showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'">
                     <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
                 </button>
@@ -36,7 +36,7 @@
         <div>
             <label class="form-label" for="password_confirmation">تأكيد كلمة المرور</label>
             <div class="relative">
-                <input class="form-input pl-12" id="password_confirmation" name="password_confirmation" x-model="confirmation" x-bind:type="showConfirmation ? 'text' : 'password'" autocomplete="new-password" required>
+                <input class="form-input pl-12" id="password_confirmation" name="password_confirmation" type="password" x-model="confirmation" x-bind:type="showConfirmation ? 'text' : 'password'" autocomplete="new-password" required>
                 <button type="button" class="absolute inset-y-0 left-2 grid w-9 place-items-center text-slate-400 hover:text-emerald-700" x-on:click="showConfirmation = !showConfirmation" x-bind:aria-label="showConfirmation ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'">
                     <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
                 </button>

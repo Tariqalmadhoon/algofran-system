@@ -1,7 +1,14 @@
 <?php
 
+$configuredDriver = strtolower(trim((string) env('HASH_DRIVER', 'bcrypt')));
+$driver = match ($configuredDriver) {
+    'bcrypt', 'bycrypt' => 'bcrypt',
+    'argon', 'argon2id' => $configuredDriver,
+    default => 'bcrypt',
+};
+
 return [
-    'driver' => env('HASH_DRIVER', 'bcrypt'),
+    'driver' => $driver,
 
     'bcrypt' => [
         'rounds' => env('BCRYPT_ROUNDS', 12),
