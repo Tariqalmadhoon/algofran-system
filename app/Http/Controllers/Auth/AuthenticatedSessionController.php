@@ -7,10 +7,12 @@ use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use RuntimeException;
 
 class AuthenticatedSessionController extends Controller
 {
@@ -35,7 +37,20 @@ class AuthenticatedSessionController extends Controller
         $provider = $guard->getProvider();
         $user = $provider->retrieveByCredentials($credentials);
 
-        if (! $user || ! $user->active || $user->archived_at || ! $provider->validateCredentials($user, $credentials)) {
+        $credentialsAreValid = false;
+        if ($user && $user->active && ! $user->archived_at) {
+            try {
+                $credentialsAreValid = $provider->validateCredentials($user, $credentials);
+            } catch (RuntimeException $exception) {
+                Log::warning('Login rejected because the stored password hash is invalid.', [
+                    'user_id' => $user->id,
+                    'algorithm' => password_get_info((string) $user->getAuthPassword())['algoName'] ?? 'unknown',
+                    'exception' => $exception->getMessage(),
+                ]);
+            }
+        }
+
+        if (! $credentialsAreValid) {
             RateLimiter::hit($key, 60);
             throw ValidationException::withMessages(['email' => 'بيانات الدخول غير صحيحة أو الحساب غير نشط.']);
         }

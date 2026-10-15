@@ -37,6 +37,13 @@ class AuthenticationTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_login_password_is_masked_before_javascript_initializes(): void
+    {
+        $this->get(route('login'))
+            ->assertOk()
+            ->assertSee('name="password" type="password"', false);
+    }
+
     public function test_login_accepts_an_existing_bcrypt_hash_and_rehashes_it_when_needed(): void
     {
         $user = User::factory()->create();
@@ -53,6 +60,37 @@ class AuthenticationTest extends TestCase
         $this->assertTrue(password_verify('ImportedPass123!', $storedHash));
         $this->assertSame('bcrypt', password_get_info($storedHash)['algoName']);
         $this->assertFalse(Hash::needsRehash($storedHash));
+    }
+
+    public function test_an_invalid_manually_stored_hash_is_rejected_without_a_server_error(): void
+    {
+        $user = User::factory()->create();
+        DB::table('users')->where('id', $user->id)->update(['password' => 'not-a-valid-bcrypt-hash']);
+
+        $this->from(route('login'))->post(route('login.store'), [
+            'email' => $user->email,
+            'password' => 'AnyPassword123!',
+        ])->assertRedirect(route('login'))->assertSessionHasErrors('email');
+
+        $this->assertGuest();
+    }
+
+    public function test_console_command_sets_a_valid_bcrypt_password(): void
+    {
+        $user = User::factory()->create();
+
+        $this->artisan('system:user-password', ['email' => $user->email])
+            ->expectsQuestion('New password', 'ConsolePass123!')
+            ->expectsQuestion('Confirm new password', 'ConsolePass123!')
+            ->assertSuccessful();
+
+        $storedHash = $user->fresh()->password;
+        $this->assertTrue(Hash::check('ConsolePass123!', $storedHash));
+        $this->assertSame('bcrypt', password_get_info($storedHash)['algoName']);
+        $this->assertDatabaseHas('audit_logs', [
+            'auditable_id' => $user->id,
+            'action' => 'auth.password.console_reset',
+        ]);
     }
 
     public function test_inactive_user_cannot_log_in(): void
