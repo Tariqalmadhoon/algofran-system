@@ -12,6 +12,7 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Http\Request;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Queue\Events\QueueBusy;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +21,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Laravel\Fortify\Fortify;
 
@@ -56,6 +58,10 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('api', fn (Request $request) => Limit::perMinute(60)->by($request->user()?->id ?: $request->ip()));
         RateLimiter::for('mobile-release-upload', fn (Request $request) => Limit::perMinute(180)->by($request->user()?->id ?: $request->ip()));
+        RateLimiter::for('password-reset', fn (Request $request) => [
+            Limit::perMinute(3)->by(Str::lower(trim((string) $request->input('email'))).'|'.$request->ip()),
+            Limit::perHour(20)->by($request->ip()),
+        ]);
 
         DB::whenQueryingForLongerThan((int) config('system.monitoring.query_budget_ms', 750), function (Connection $connection, QueryExecuted $event): void {
             Log::warning('Database query budget exceeded.', [
@@ -82,5 +88,19 @@ class AppServiceProvider extends ServiceProvider
             'token' => $token,
             'email' => $user->email,
         ]));
+
+        ResetPassword::toMailUsing(function (User $user, string $token): MailMessage {
+            $expiresIn = (int) config('auth.passwords.'.config('auth.defaults.passwords').'.expire', 60);
+            $resetUrl = route('password.reset', ['token' => $token, 'email' => $user->email]);
+
+            return (new MailMessage)
+                ->subject('استعادة كلمة المرور | '.config('app.name'))
+                ->greeting('السلام عليكم '.$user->name.'،')
+                ->line('وصلنا طلب آمن لإعادة تعيين كلمة المرور الخاصة بحسابك في نظام المركز.')
+                ->action('تعيين كلمة مرور جديدة', $resetUrl)
+                ->line("ينتهي هذا الرابط خلال {$expiresIn} دقيقة، ولا يمكن استخدامه بعد تغيير كلمة المرور.")
+                ->line('إذا لم تطلب استعادة كلمة المرور، تجاهل هذه الرسالة ولن يتغير حسابك.')
+                ->salutation('فريق '.config('app.name'));
+        });
     }
 }
