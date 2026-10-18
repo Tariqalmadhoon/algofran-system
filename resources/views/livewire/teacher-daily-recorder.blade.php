@@ -64,7 +64,7 @@
 
     <ol class="grid gap-3 sm:grid-cols-3" aria-label="مراحل التسجيل">
         @foreach([
-            ['label' => 'الإعداد', 'hint' => $isBackdatedRecord ? 'تسجيل متأخر · '.$recordDate : 'التاريخ والحلقة', 'done' => $recordDate !== '' && $halaqaId !== ''],
+            ['label' => 'الإعداد', 'hint' => $editingDailyRecordId ? 'تعديل سجل · '.$recordDate : ($isBackdatedRecord ? 'تسجيل متأخر · '.$recordDate : 'التاريخ والحلقة'), 'done' => $recordDate !== '' && $halaqaId !== ''],
             ['label' => 'الطالب', 'hint' => $selectedStudent?->full_name ?? 'اختر طالبًا', 'done' => $studentId !== ''],
             ['label' => 'الجلسة', 'hint' => $studentId ? 'الحضور والتسميع' : 'تبدأ بعد اختيار الطالب', 'done' => $studentId !== '' && ($isAbsence || $completedRanges > 0)],
         ] as $stepIndex => $step)
@@ -86,6 +86,18 @@
         </x-feedback-alert>
     @endif
 
+    @if($editingDailyRecordId)
+        <div class="flex flex-col gap-3 rounded-3xl border border-sky-200 bg-sky-50 p-4 text-sky-950 sm:flex-row sm:items-center sm:justify-between" role="status">
+            <div class="flex items-start gap-3">
+                <span class="grid size-10 shrink-0 place-items-center rounded-2xl bg-white text-sky-700 shadow-sm">
+                    <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
+                </span>
+                <div><strong class="block text-sm">أنت تعدّل سجلًا محفوظًا</strong><span class="mt-1 block text-xs leading-5 text-sky-800">يمكنك تصحيح الحضور والتقييم ونطاقات التسميع. يبقى الطالب والحلقة والتاريخ ثابتة لحماية تسلسل السجلات.</span></div>
+            </div>
+            <button wire:click="cancelEditing" type="button" class="btn-secondary shrink-0 border-sky-200 text-sky-800 hover:bg-sky-100">إلغاء التعديل</button>
+        </div>
+    @endif
+
     <section @class(['panel', '!border-amber-200 !bg-amber-50/30' => $isBackdatedRecord])>
         <div class="mb-5 flex items-center gap-3">
             <span @class(['grid size-10 place-items-center rounded-2xl font-black', 'bg-amber-100 text-amber-800' => $isBackdatedRecord, 'bg-emerald-100 text-emerald-800' => ! $isBackdatedRecord])>1</span>
@@ -95,14 +107,14 @@
             <div>
                 <span class="form-label">تاريخ الجلسة الفعلي</span>
                 <div class="grid grid-cols-[auto_auto_minmax(0,1fr)] gap-2">
-                    <button wire:click="chooseRecordDate('{{ today()->toDateString() }}')" type="button" @class(['rounded-xl border px-3 py-2.5 text-xs font-black', 'border-emerald-600 bg-emerald-700 text-white' => $recordDate === today()->toDateString(), 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300' => $recordDate !== today()->toDateString()])>اليوم</button>
-                    <button wire:click="chooseRecordDate('{{ today()->subDay()->toDateString() }}')" type="button" @class(['rounded-xl border px-3 py-2.5 text-xs font-black', 'border-amber-500 bg-amber-500 text-white' => $recordDate === today()->subDay()->toDateString(), 'border-slate-200 bg-white text-slate-600 hover:border-amber-300' => $recordDate !== today()->subDay()->toDateString()])>أمس</button>
-                    <input wire:model.live="recordDate" type="date" max="{{ today()->toDateString() }}" class="form-input" dir="ltr" aria-label="اختيار تاريخ جلسة سابق">
+                    <button wire:click="chooseRecordDate('{{ today()->toDateString() }}')" type="button" @disabled($editingDailyRecordId) @class(['rounded-xl border px-3 py-2.5 text-xs font-black disabled:cursor-not-allowed disabled:opacity-60', 'border-emerald-600 bg-emerald-700 text-white' => $recordDate === today()->toDateString(), 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300' => $recordDate !== today()->toDateString()])>اليوم</button>
+                    <button wire:click="chooseRecordDate('{{ today()->subDay()->toDateString() }}')" type="button" @disabled($editingDailyRecordId) @class(['rounded-xl border px-3 py-2.5 text-xs font-black disabled:cursor-not-allowed disabled:opacity-60', 'border-amber-500 bg-amber-500 text-white' => $recordDate === today()->subDay()->toDateString(), 'border-slate-200 bg-white text-slate-600 hover:border-amber-300' => $recordDate !== today()->subDay()->toDateString()])>أمس</button>
+                    <input wire:model.live="recordDate" type="date" max="{{ today()->toDateString() }}" class="form-input" dir="ltr" aria-label="اختيار تاريخ جلسة سابق" @disabled($editingDailyRecordId)>
                 </div>
                 <p class="mt-1.5 text-[11px] leading-5 text-slate-500">إذا نُسي تسجيل الجلسة، اختر يومها الحقيقي ثم اختر الطالب وسجّل الحضور والتسميع كالمعتاد.</p>
                 <x-input-error :messages="$errors->get('recordDate')" />
             </div>
-            <label><span class="form-label">الحلقة المسندة إليّ</span><select wire:model.live="halaqaId" class="form-input"><option value="">لا توجد حلقة مسندة</option>@foreach($halaqas as $halaqa)<option value="{{ $halaqa->id }}">{{ $halaqa->name }}</option>@endforeach</select><x-input-error :messages="$errors->get('halaqaId')" /></label>
+            <label><span class="form-label">الحلقة المسندة إليّ</span><select wire:model.live="halaqaId" class="form-input" @disabled($editingDailyRecordId)><option value="">لا توجد حلقة مسندة</option>@foreach($halaqas as $halaqa)<option value="{{ $halaqa->id }}">{{ $halaqa->name }}</option>@endforeach</select><x-input-error :messages="$errors->get('halaqaId')" /></label>
         </div>
         @if($isBackdatedRecord)
             <div class="mt-4 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900" role="status">
@@ -187,7 +199,10 @@
                     </span>
                     <span class="mt-3 grid grid-cols-2 gap-2">
                         @if($student->recorded_for_date)
-                            <span class="inline-flex min-h-10 items-center justify-center rounded-xl bg-emerald-100 px-2 text-xs font-black text-emerald-800">تم تسجيل اليوم</span>
+                            <button wire:click="editStudentRecord({{ $student->id }})" type="button" class="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-sky-600 px-2 text-xs font-black text-white transition hover:bg-sky-700">
+                                <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
+                                تعديل التسجيل
+                            </button>
                         @else
                             <button wire:click="selectStudent({{ $student->id }})" type="button" class="inline-flex min-h-10 items-center justify-center rounded-xl bg-emerald-700 px-2 text-xs font-black text-white transition hover:bg-emerald-800">تسجيل اليوم</button>
                         @endif
@@ -304,6 +319,14 @@
                                 @if($record->general_evaluation)
                                     <span class="rounded-full px-3 py-1 text-xs font-black {{ $evaluationStyle }}">التقييم العام: {{ $record->general_evaluation->label() }}</span>
                                 @endif
+                                @can('update', $record)
+                                    @if((int) $record->teacher_profile_id === (int) $teacherProfileId)
+                                        <button wire:click="editDailyRecord({{ $record->id }})" type="button" class="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-white px-3 py-1 text-xs font-black text-sky-700 transition hover:border-sky-300 hover:bg-sky-50">
+                                            <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
+                                            تعديل السجل
+                                        </button>
+                                    @endif
+                                @endcan
                             </div>
                         </div>
 
@@ -379,14 +402,14 @@
                 <div class="flex flex-col gap-4 border-b border-slate-100 bg-emerald-50/60 p-5 sm:flex-row sm:items-center sm:justify-between">
                     <div class="flex items-center gap-3">
                         <x-student-avatar :student="$selectedStudent" />
-                        <div><p class="text-xs font-bold text-emerald-700">تسجّل الآن للطالب</p><h2 class="text-lg font-black text-emerald-950">{{ $selectedStudent->full_name }}</h2><p class="text-xs text-slate-500" dir="ltr">{{ $selectedStudent->student_number }}</p></div>
+                        <div><p class="text-xs font-bold {{ $editingDailyRecordId ? 'text-sky-700' : 'text-emerald-700' }}">{{ $editingDailyRecordId ? 'تعدّل الآن سجل الطالب' : 'تسجّل الآن للطالب' }}</p><h2 class="text-lg font-black text-emerald-950">{{ $selectedStudent->full_name }}</h2><p class="text-xs text-slate-500" dir="ltr">{{ $selectedStudent->student_number }}</p></div>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
                         <button wire:click="showStudentHistory({{ $selectedStudent->id }})" type="button" class="btn-secondary inline-flex items-center gap-2">
                             <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>
                             الكشف السابق
                         </button>
-                        <button wire:click="clearSelectedStudent" type="button" class="btn-ghost font-black text-slate-600">تغيير الطالب</button>
+                        <button wire:click="{{ $editingDailyRecordId ? 'cancelEditing' : 'clearSelectedStudent' }}" type="button" class="btn-ghost font-black text-slate-600">{{ $editingDailyRecordId ? 'إلغاء التعديل' : 'تغيير الطالب' }}</button>
                     </div>
                 </div>
 
@@ -543,7 +566,7 @@
             <div class="sticky bottom-4 z-30 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-[0_16px_45px_-18px_rgba(15,23,42,.4)] backdrop-blur">
                 <div class="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div class="min-w-0"><p class="truncate text-sm font-black text-emerald-950">{{ $selectedStudent->full_name }} · {{ $attendanceLabel }}</p><p class="text-xs text-slate-500">{{ $isAbsence ? 'سيُحفظ الحضور دون تسميع أو تقييم' : $enabledCount.' بنود مفعّلة · '.$completedRanges.' نطاقات مكتملة' }}</p></div>
-                    <button class="btn-primary min-w-44" wire:loading.attr="disabled" type="submit"><span wire:loading.remove wire:target="save">تأكيد وحفظ السجل</span><span wire:loading wire:target="save">جارٍ التحقق والحفظ…</span></button>
+                    <button class="btn-primary min-w-44" wire:loading.attr="disabled" type="submit"><span wire:loading.remove wire:target="save">{{ $editingDailyRecordId ? 'حفظ تعديلات السجل' : 'تأكيد وحفظ السجل' }}</span><span wire:loading wire:target="save">{{ $editingDailyRecordId ? 'جارٍ تحديث السجل…' : 'جارٍ التحقق والحفظ…' }}</span></button>
                 </div>
             </div>
         </form>

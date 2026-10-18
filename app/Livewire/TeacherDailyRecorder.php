@@ -35,6 +35,8 @@ class TeacherDailyRecorder extends Component
 
     public string $studentId = '';
 
+    public ?int $editingDailyRecordId = null;
+
     public string $studentSearch = '';
 
     public string $historyStudentId = '';
@@ -216,6 +218,7 @@ class TeacherDailyRecorder extends Component
             return;
         }
 
+        $this->editingDailyRecordId = null;
         $this->resetSessionDetails();
         $this->studentId = (string) $student->id;
         if ($this->quranReferenceIsReady()) {
@@ -227,6 +230,90 @@ class TeacherDailyRecorder extends Component
     }
 
     public function clearSelectedStudent(): void
+    {
+        $this->resetRecorder();
+        $this->resetValidation();
+    }
+
+    public function editStudentRecord(int $studentId): void
+    {
+        $student = $this->studentInSelectedHalaqa($studentId);
+        if (! $student) {
+            $this->addError('studentId', 'لا يمكن تعديل سجل طالب خارج الحلقة المسندة إليك.');
+
+            return;
+        }
+
+        $record = DailyRecord::query()
+            ->where('student_id', $student->id)
+            ->where('halaqa_id', (int) $this->halaqaId)
+            ->whereDate('record_date', $this->recordDate)
+            ->first();
+
+        if (! $record) {
+            $this->addError('studentId', 'لم يعد السجل موجودًا. حدّث الصفحة وحاول مرة أخرى.');
+
+            return;
+        }
+
+        $this->editDailyRecord($record->id);
+    }
+
+    public function editDailyRecord(int $recordId): void
+    {
+        $teacher = $this->authenticatedTeacherProfile();
+        $record = DailyRecord::query()
+            ->with([
+                'student',
+                'attendance',
+                'recitationItems.startAyah.surah',
+                'recitationItems.endAyah.surah',
+            ])
+            ->findOrFail($recordId);
+
+        Gate::authorize('update', $record);
+        abort_unless((int) $record->teacher_profile_id === (int) $teacher->id, 403);
+
+        $this->recordDate = $record->record_date->toDateString();
+        $this->halaqaId = (string) $record->halaqa_id;
+        abort_unless($this->studentInSelectedHalaqa((int) $record->student_id), 403);
+
+        $this->editingDailyRecordId = $record->id;
+        $this->studentId = (string) $record->student_id;
+        $this->attendanceStatus = $record->attendance?->status?->value ?? AttendanceStatus::Present->value;
+        $this->attendanceNotes = $record->attendance?->notes ?? '';
+        $this->generalEvaluation = $record->general_evaluation?->value ?? '';
+        $this->notes = $record->notes ?? '';
+        $this->items = $this->freshItems();
+
+        foreach ($record->recitationItems as $recordItem) {
+            $index = array_search($recordItem->type->value, array_column($this->items, 'type'), true);
+            if ($index === false) {
+                continue;
+            }
+
+            $this->items[$index] = [
+                'enabled' => true,
+                'type' => $recordItem->type->value,
+                'start_surah_id' => (string) $recordItem->startAyah->surah_id,
+                'start_ayah_number' => (string) $recordItem->startAyah->ayah_number,
+                'end_surah_id' => (string) $recordItem->endAyah->surah_id,
+                'end_ayah_number' => (string) $recordItem->endAyah->ayah_number,
+                'evaluation' => $recordItem->evaluation->value,
+                'memorization_errors' => $recordItem->memorization_errors,
+                'tajweed_errors' => $recordItem->tajweed_errors,
+                'hesitation_count' => $recordItem->hesitation_count,
+                'teacher_prompt_count' => $recordItem->teacher_prompt_count,
+                'notes' => $recordItem->notes ?? '',
+            ];
+        }
+
+        $this->closeStudentHistory();
+        $this->resetValidation();
+        $this->dispatch('daily-student-selected');
+    }
+
+    public function cancelEditing(): void
     {
         $this->resetRecorder();
         $this->resetValidation();
@@ -453,7 +540,23 @@ class TeacherDailyRecorder extends Component
 
         $halaqa = Halaqa::query()->findOrFail($data['halaqaId']);
         $student = Student::query()->findOrFail($data['studentId']);
-        Gate::authorize('create', [DailyRecord::class, $halaqa, $data['recordDate']]);
+        $editingRecord = $this->editingDailyRecordId
+            ? DailyRecord::query()->findOrFail($this->editingDailyRecordId)
+            : null;
+
+        if ($editingRecord) {
+            Gate::authorize('update', $editingRecord);
+            if ((int) $editingRecord->student_id !== (int) $student->id
+                || (int) $editingRecord->halaqa_id !== (int) $halaqa->id
+                || (int) $editingRecord->teacher_profile_id !== (int) $teacher->id
+                || $editingRecord->record_date->toDateString() !== $data['recordDate']) {
+                throw ValidationException::withMessages([
+                    'editingDailyRecordId' => 'تم رفض تغيير هوية السجل أو تاريخه أثناء التعديل. أعد فتح السجل من الكشف السابق.',
+                ]);
+            }
+        } else {
+            Gate::authorize('create', [DailyRecord::class, $halaqa, $data['recordDate']]);
+        }
 
         $attendanceStatus = AttendanceStatus::from($data['attendanceStatus']);
         if ($attendanceStatus->isAbsence()) {
@@ -504,15 +607,21 @@ class TeacherDailyRecorder extends Component
             $items[] = $item + ['start_ayah_id' => $start->id, 'end_ayah_id' => $end->id];
         }
 
+        $payload = [
+            'record_date' => $data['recordDate'],
+            'attendance_status' => $data['attendanceStatus'],
+            'attendance_notes' => $data['attendanceNotes'] ?: null,
+            'general_evaluation' => $data['generalEvaluation'] ?: null,
+            'notes' => $data['notes'] ?: null,
+            'items' => $items,
+        ];
+
         try {
-            $recordDaily->execute($student, $halaqa, $teacher, [
-                'record_date' => $data['recordDate'],
-                'attendance_status' => $data['attendanceStatus'],
-                'attendance_notes' => $data['attendanceNotes'] ?: null,
-                'general_evaluation' => $data['generalEvaluation'] ?: null,
-                'notes' => $data['notes'] ?: null,
-                'items' => $items,
-            ], auth()->user());
+            if ($editingRecord) {
+                $recordDaily->update($editingRecord, $payload, auth()->user());
+            } else {
+                $recordDaily->execute($student, $halaqa, $teacher, $payload, auth()->user());
+            }
         } catch (ValidationException $exception) {
             $this->rethrowForComponent($exception);
         }
@@ -520,8 +629,14 @@ class TeacherDailyRecorder extends Component
         $studentName = $student->full_name;
         $itemsCount = count($items);
         $recordDateLabel = Carbon::parse($data['recordDate'])->locale('ar')->translatedFormat('l، j F Y');
+        $wasEditing = $editingRecord !== null;
         $this->resetRecorder();
-        session()->flash('success', "تم حفظ الحضور والتسميع اليومي للطالب. {$studentName} · تاريخ الجلسة: {$recordDateLabel} · {$itemsCount} بنود تسميع. يمكنك الآن اختيار الطالب التالي.");
+        session()->flash(
+            'success',
+            $wasEditing
+                ? "تم تحديث سجل الطالب بنجاح. {$studentName} · تاريخ الجلسة: {$recordDateLabel} · {$itemsCount} بنود تسميع."
+                : "تم حفظ الحضور والتسميع اليومي للطالب. {$studentName} · تاريخ الجلسة: {$recordDateLabel} · {$itemsCount} بنود تسميع. يمكنك الآن اختيار الطالب التالي.",
+        );
     }
 
     public function exportMemorizationRecords(ReportExportService $exports): void
@@ -756,6 +871,7 @@ class TeacherDailyRecorder extends Component
 
     private function resetRecorder(): void
     {
+        $this->editingDailyRecordId = null;
         $this->studentId = '';
         $this->resetSessionDetails();
     }

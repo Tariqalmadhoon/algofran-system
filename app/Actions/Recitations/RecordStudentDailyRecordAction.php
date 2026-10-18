@@ -45,35 +45,7 @@ class RecordStudentDailyRecordAction
                 throw ValidationException::withMessages(['record_date' => 'يوجد سجل يومي لهذا الطالب في التاريخ المحدد.']);
             }
 
-            $attendanceStatus = AttendanceStatus::from($data['attendance_status']);
-            $generalEvaluation = empty($data['general_evaluation'])
-                ? null
-                : EvaluationRating::from($data['general_evaluation'])->value;
-            $items = array_values(array_filter($data['items'] ?? [], fn (array $item) => ! empty($item['enabled'])));
-
-            if ($attendanceStatus->isAbsence() && count($items) > 0) {
-                throw ValidationException::withMessages(['items' => 'لا يمكن تسجيل تسميع للطالب الغائب، سواء كان الغياب بعذر أو دون عذر.']);
-            }
-
-            if ($attendanceStatus->isAbsence()) {
-                $generalEvaluation = null;
-            }
-
-            $validatedItems = [];
-            foreach ($items as $item) {
-                [$start, $end] = $this->quranRange->validate((int) $item['start_ayah_id'], (int) $item['end_ayah_id']);
-                $validatedItems[] = [
-                    'type' => RecitationType::from($item['type'])->value,
-                    'start_ayah_id' => $start->id,
-                    'end_ayah_id' => $end->id,
-                    'evaluation' => EvaluationRating::from($item['evaluation'])->value,
-                    'notes' => $item['notes'] ?? null,
-                    'memorization_errors' => max(0, (int) ($item['memorization_errors'] ?? 0)),
-                    'tajweed_errors' => max(0, (int) ($item['tajweed_errors'] ?? 0)),
-                    'hesitation_count' => max(0, (int) ($item['hesitation_count'] ?? 0)),
-                    'teacher_prompt_count' => max(0, (int) ($item['teacher_prompt_count'] ?? 0)),
-                ];
-            }
+            [$attendanceStatus, $generalEvaluation, $validatedItems] = $this->normalizePayload($data);
 
             $attendance = Attendance::query()->create([
                 'student_id' => $student->id,
@@ -124,6 +96,76 @@ class RecordStudentDailyRecordAction
         });
     }
 
+    public function update(DailyRecord $record, array $data, User $actor): DailyRecord
+    {
+        return DB::transaction(function () use ($record, $data, $actor) {
+            $record = DailyRecord::query()
+                ->with(['student', 'halaqa', 'teacher.user', 'attendance', 'recitationItems'])
+                ->lockForUpdate()
+                ->findOrFail($record->id);
+
+            $recordDate = $record->record_date->toDateString();
+            if ($recordDate !== Carbon::parse($data['record_date'])->toDateString()) {
+                throw ValidationException::withMessages([
+                    'record_date' => 'لا يمكن تغيير تاريخ السجل أثناء التعديل. أنشئ السجل في تاريخه الصحيح بدلًا من نقل بياناته إلى يوم آخر.',
+                ]);
+            }
+
+            $date = $this->ensureCanRecord(
+                $record->student,
+                $record->halaqa,
+                $record->teacher,
+                $recordDate,
+                $actor,
+            );
+            [$attendanceStatus, $generalEvaluation, $validatedItems] = $this->normalizePayload($data);
+            $oldValues = $this->auditValues($record);
+
+            $attendance = Attendance::query()->lockForUpdate()->findOrFail($record->attendance_id);
+            $attendance->update([
+                'student_id' => $record->student_id,
+                'halaqa_id' => $record->halaqa_id,
+                'record_date' => $date->toDateString(),
+                'status' => $attendanceStatus->value,
+                'recorded_by' => $actor->id,
+                'notes' => $data['attendance_notes'] ?? null,
+            ]);
+            $record->update([
+                'general_evaluation' => $generalEvaluation,
+                'notes' => $data['notes'] ?? null,
+                'updated_by' => $actor->id,
+            ]);
+            $record->recitationItems()->delete();
+            foreach ($validatedItems as $item) {
+                $record->recitationItems()->create($item);
+            }
+
+            $record->load(['attendance', 'recitationItems.startAyah.surah', 'recitationItems.endAyah.surah']);
+            $newValues = $this->auditValues($record);
+            $this->timeline->record(
+                $record->student,
+                'daily-record.updated',
+                'تعديل السجل اليومي',
+                $record,
+                $attendanceStatus->label().' — '.count($validatedItems).' بنود تسميع',
+                ['attendance' => $attendanceStatus->value, 'recitation_items_count' => count($validatedItems)],
+                $date,
+            );
+            $this->auditLogger->record(
+                'student.daily-record.updated',
+                $record,
+                oldValues: $oldValues,
+                newValues: $newValues,
+                actor: $actor,
+            );
+            $snapshot = $this->progress->snapshot($record->student);
+            $this->alerts->evaluate($record->student->refresh(), $snapshot, $date);
+            $this->achievements->evaluate($record->student, $snapshot);
+
+            return $record;
+        });
+    }
+
     public function ensureCanRecord(
         Student $student,
         Halaqa $halaqa,
@@ -158,5 +200,64 @@ class RecordStudentDailyRecordAction
         if (! $enrolled) {
             throw ValidationException::withMessages(['student_id' => 'الطالب غير ملتحق بهذه الحلقة في التاريخ المحدد.']);
         }
+    }
+
+    /** @return array{AttendanceStatus, ?string, array<int, array<string, mixed>>} */
+    private function normalizePayload(array $data): array
+    {
+        $attendanceStatus = AttendanceStatus::from($data['attendance_status']);
+        $generalEvaluation = empty($data['general_evaluation'])
+            ? null
+            : EvaluationRating::from($data['general_evaluation'])->value;
+        $items = array_values(array_filter($data['items'] ?? [], fn (array $item) => ! empty($item['enabled'])));
+
+        if ($attendanceStatus->isAbsence() && count($items) > 0) {
+            throw ValidationException::withMessages(['items' => 'لا يمكن تسجيل تسميع للطالب الغائب، سواء كان الغياب بعذر أو دون عذر.']);
+        }
+
+        if ($attendanceStatus->isAbsence()) {
+            $generalEvaluation = null;
+        }
+
+        $validatedItems = [];
+        foreach ($items as $item) {
+            [$start, $end] = $this->quranRange->validate((int) $item['start_ayah_id'], (int) $item['end_ayah_id']);
+            $validatedItems[] = [
+                'type' => RecitationType::from($item['type'])->value,
+                'start_ayah_id' => $start->id,
+                'end_ayah_id' => $end->id,
+                'evaluation' => EvaluationRating::from($item['evaluation'])->value,
+                'notes' => $item['notes'] ?? null,
+                'memorization_errors' => max(0, (int) ($item['memorization_errors'] ?? 0)),
+                'tajweed_errors' => max(0, (int) ($item['tajweed_errors'] ?? 0)),
+                'hesitation_count' => max(0, (int) ($item['hesitation_count'] ?? 0)),
+                'teacher_prompt_count' => max(0, (int) ($item['teacher_prompt_count'] ?? 0)),
+            ];
+        }
+
+        return [$attendanceStatus, $generalEvaluation, $validatedItems];
+    }
+
+    /** @return array<string, mixed> */
+    private function auditValues(DailyRecord $record): array
+    {
+        return [
+            'record_date' => $record->record_date->toDateString(),
+            'attendance' => $record->attendance?->status?->value,
+            'attendance_notes' => $record->attendance?->notes,
+            'general_evaluation' => $record->general_evaluation?->value,
+            'notes' => $record->notes,
+            'items' => $record->recitationItems->map(fn ($item) => [
+                'type' => $item->type->value,
+                'start_ayah_id' => $item->start_ayah_id,
+                'end_ayah_id' => $item->end_ayah_id,
+                'evaluation' => $item->evaluation->value,
+                'memorization_errors' => $item->memorization_errors,
+                'tajweed_errors' => $item->tajweed_errors,
+                'hesitation_count' => $item->hesitation_count,
+                'teacher_prompt_count' => $item->teacher_prompt_count,
+                'notes' => $item->notes,
+            ])->values()->all(),
+        ];
     }
 }

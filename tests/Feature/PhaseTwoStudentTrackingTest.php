@@ -269,6 +269,103 @@ class PhaseTwoStudentTrackingTest extends TestCase
         $this->actingAs($teacherUser)->get(route('private-files.show', $export->privateFile))->assertOk();
     }
 
+    public function test_teacher_can_edit_only_their_own_saved_daily_record_from_student_history(): void
+    {
+        $this->seed(QuranReferenceSeeder::class);
+        $teacherUser = User::factory()->create();
+        $teacherUser->assignRole('teacher');
+        [$center, $branch, $halaqa] = $this->organization();
+        $teacher = TeacherProfile::query()->create([
+            'user_id' => $teacherUser->id,
+            'center_id' => $center->id,
+            'branch_id' => $branch->id,
+            'employee_number' => 'T-EDIT-DAILY',
+            'active' => true,
+        ]);
+        $halaqa->teacherAssignments()->create([
+            'teacher_profile_id' => $teacher->id,
+            'role' => 'primary',
+            'starts_at' => today()->subMonth()->toDateString(),
+        ]);
+        $student = $this->createStudent($teacherUser, $halaqa, 'STU-EDIT-DAILY');
+
+        $component = Livewire::actingAs($teacherUser)
+            ->test(TeacherDailyRecorder::class)
+            ->call('selectStudent', $student->id)
+            ->set('generalEvaluation', 'very_good')
+            ->set('items.0.start_surah_id', '1')
+            ->set('items.0.start_ayah_number', '1')
+            ->set('items.0.end_surah_id', '1')
+            ->set('items.0.end_ayah_number', '7')
+            ->set('items.0.evaluation', 'excellent')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $record = $student->dailyRecords()->with('recitationItems')->sole();
+        $component
+            ->call('showStudentHistory', $student->id)
+            ->assertSee('تعديل السجل')
+            ->call('editDailyRecord', $record->id)
+            ->assertSet('editingDailyRecordId', $record->id)
+            ->assertSet('studentId', (string) $student->id)
+            ->assertSet('items.0.enabled', true)
+            ->assertSet('items.0.end_ayah_number', '7')
+            ->set('generalEvaluation', 'good')
+            ->set('items.0.end_ayah_number', '5')
+            ->set('items.0.evaluation', 'very_good')
+            ->set('items.0.memorization_errors', 2)
+            ->set('notes', 'تم تصحيح مقدار الحفظ بعد المراجعة.')
+            ->call('save')
+            ->assertHasNoErrors()
+            ->assertSet('editingDailyRecordId', null)
+            ->assertSet('studentId', '')
+            ->assertSee('تم تحديث سجل الطالب بنجاح.');
+
+        $record->refresh();
+        $this->assertSame('good', $record->general_evaluation->value);
+        $this->assertSame('تم تصحيح مقدار الحفظ بعد المراجعة.', $record->notes);
+        $this->assertSame($teacherUser->id, $record->updated_by);
+        $this->assertDatabaseCount('daily_records', 1);
+        $this->assertDatabaseHas('recitation_items', [
+            'daily_record_id' => $record->id,
+            'type' => 'new_memorization',
+            'start_ayah_id' => 1,
+            'end_ayah_id' => 5,
+            'evaluation' => 'very_good',
+            'memorization_errors' => 2,
+        ]);
+        $this->assertDatabaseHas('student_timeline_events', [
+            'student_id' => $student->id,
+            'event_type' => 'daily-record.updated',
+            'source_id' => $record->id,
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'user_id' => $teacherUser->id,
+            'action' => 'student.daily-record.updated',
+            'auditable_id' => $record->id,
+        ]);
+
+        $otherTeacherUser = User::factory()->create();
+        $otherTeacherUser->assignRole('teacher');
+        $otherTeacher = TeacherProfile::query()->create([
+            'user_id' => $otherTeacherUser->id,
+            'center_id' => $center->id,
+            'branch_id' => $branch->id,
+            'employee_number' => 'T-CANNOT-EDIT-OTHER',
+            'active' => true,
+        ]);
+        $halaqa->teacherAssignments()->create([
+            'teacher_profile_id' => $otherTeacher->id,
+            'role' => 'assistant',
+            'starts_at' => today()->subMonth()->toDateString(),
+        ]);
+
+        Livewire::actingAs($otherTeacherUser)
+            ->test(TeacherDailyRecorder::class)
+            ->call('editDailyRecord', $record->id)
+            ->assertForbidden();
+    }
+
     public function test_assigned_teacher_can_add_students_only_to_their_halaqa_with_a_visible_photo(): void
     {
         Storage::fake('private');
