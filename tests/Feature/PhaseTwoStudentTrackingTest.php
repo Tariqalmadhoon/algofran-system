@@ -466,6 +466,19 @@ class PhaseTwoStudentTrackingTest extends TestCase
         Storage::disk('private')->assertMissing($photo->path);
     }
 
+    public function test_student_photo_picker_rejects_unsupported_files_without_breaking_the_form(): void
+    {
+        $registrar = User::factory()->create();
+        $registrar->assignRole('registrar');
+        [$center, $branch] = $this->organization();
+        $this->staffInCenter($registrar, $center, $branch, 'STF-PHOTO-VALIDATION');
+
+        Livewire::actingAs($registrar)
+            ->test(StudentsIndex::class)
+            ->set('photo', UploadedFile::fake()->create('student-photo.pdf', 100, 'application/pdf'))
+            ->assertHasErrors(['photo']);
+    }
+
     public function test_teacher_can_record_a_missed_session_for_a_previous_assigned_day(): void
     {
         $this->seed(QuranReferenceSeeder::class);

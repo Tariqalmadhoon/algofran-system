@@ -90,7 +90,7 @@ MOBILE_APP_RELEASE_NOTES="الإصدار الرسمي للمركز مع المز
 
 Workflow: `.github/workflows/mobile-release.yml`، تشغيل يدوي من الفرع المعتمد بعد رفع الكود. يختبر ثم يبني ويرفق الملفات الثلاثة كـArtifact؛ **لا ينشرها تلقائيًا على Hostinger**.
 
-1. عرّف Repository variable `MOBILE_RELEASE_BRANCH=gofran/T1` (شرط تشغيل الوظيفة يقرأ متغير المستودع).
+1. عرّف Repository variable `MOBILE_RELEASE_BRANCH=main` بعد دمج طلب السحب (شرط تشغيل الوظيفة يقرأ متغير المستودع).
 2. أنشئ Environment باسم `mobile-release` وقيّد فروعه إلى الفرع المعتمد.
 3. متغيراته: `MOBILE_API_BASE_URL=https://algofran-center.tech/api/v1`، و`ANDROID_SIGNING_CERTIFICATE_SHA256` من manifest أول إصدار موثوق.
 4. أسراره: `ANDROID_KEYSTORE_BASE64` محتوى مفتاح التوقيع بصيغة Base64، و`ANDROID_KEY_PROPERTIES_BASE64` محتوى ملف الإعدادات بصيغة Base64. أدخلها عبر واجهة GitHub الآمنة، ولا تطبعها في السجلات أو تضعها في المستودع. Base64 ترميز وليس تشفيرًا.

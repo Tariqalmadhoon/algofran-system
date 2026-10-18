@@ -25,8 +25,8 @@
     aria-live="{{ $type === 'error' ? 'assertive' : 'polite' }}"
 >
     <span aria-hidden="true" class="absolute inset-y-0 right-0 w-1.5 {{ $accent }}"></span>
-    <div class="flex items-start gap-3.5 p-4 pr-5">
-        <span class="grid size-11 shrink-0 place-items-center rounded-2xl {{ $iconBackground }} {{ $text }}">
+    <div class="flex items-start gap-2.5 p-3 pr-4 sm:gap-3.5 sm:p-4 sm:pr-5">
+        <span class="grid size-10 shrink-0 place-items-center rounded-xl sm:size-11 sm:rounded-2xl {{ $iconBackground }} {{ $text }}">
             @if($type === 'success')
                 <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg>
             @elseif($type === 'error')
@@ -39,7 +39,7 @@
         </span>
         <div class="min-w-0 flex-1 pt-0.5">
             <p class="text-sm font-black text-slate-900">{{ $title ?: $defaultTitle }}</p>
-            <div class="mt-1 text-xs font-medium leading-6 text-slate-600">
+            <div class="mt-1 break-words text-xs font-medium leading-6 text-slate-600 [overflow-wrap:anywhere]">
                 @if($message !== null){{ $message }}@else{{ $slot }}@endif
             </div>
         </div>

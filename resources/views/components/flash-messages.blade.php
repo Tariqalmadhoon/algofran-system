@@ -32,7 +32,7 @@
     <div @class([
         'space-y-3',
         'mb-6' => $inline,
-        'fixed left-4 top-24 z-[85] w-[min(25rem,calc(100vw-2rem))]' => ! $inline,
+        'fixed inset-x-3 top-24 z-[85] max-h-[calc(100dvh-7rem)] space-y-3 overflow-y-auto overscroll-contain pb-1 sm:right-auto sm:left-4 sm:w-[min(25rem,calc(100vw-2rem))]' => ! $inline,
     ]) data-feedback-stack>
         @foreach($feedbackMessages as $feedback)
             <x-feedback-alert :type="$feedback['type']" :message="$feedback['message']" :duration="$feedback['type'] === 'error' ? 9000 : 6200" />
