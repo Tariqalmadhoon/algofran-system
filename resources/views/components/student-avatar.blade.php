@@ -18,19 +18,22 @@
         .mb_substr($student->family_name ?: '', 0, 1);
 @endphp
 
-<span {{ $attributes->class([
+<span x-data="{ photoFailed: false }" {{ $attributes->class([
     'relative inline-grid shrink-0 place-items-center overflow-hidden bg-gradient-to-br from-emerald-800 to-teal-600 font-black text-white shadow-sm',
     $sizes[$size] ?? $sizes['md'],
 ]) }}>
+    <span aria-hidden="true">{{ $initials }}</span>
+
     @if($photo)
         <img
+            x-cloak
+            x-show="!photoFailed"
+            x-on:error="photoFailed = true"
             src="{{ route('private-files.preview', $photo) }}"
             alt="صورة {{ $student->full_name }}"
-            class="size-full object-cover"
+            class="absolute inset-0 size-full object-cover"
             loading="lazy"
         >
-    @else
-        <span aria-hidden="true">{{ $initials }}</span>
     @endif
 
     @if($badge)

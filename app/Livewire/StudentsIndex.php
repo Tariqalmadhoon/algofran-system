@@ -77,6 +77,13 @@ class StudentsIndex extends Component
         $this->resetPage();
     }
 
+    public function updatedPhoto(): void
+    {
+        $this->validateOnly('photo', [
+            'photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+        ]);
+    }
+
     public function save(CreateStudentAction $createStudent, PrivateFileService $privateFiles): void
     {
         Gate::authorize('create', Student::class);
@@ -95,7 +102,7 @@ class StudentsIndex extends Component
             'status' => ['required', Rule::enum(StudentStatus::class)],
             'halaqaId' => [$teacherMode ? 'required' : 'nullable', 'exists:halaqas,id'],
             'notes' => ['nullable', 'string', 'max:3000'],
-            'photo' => ['nullable', 'image', 'max:2048'],
+            'photo' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
             'identityDocument' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
         ]);
 
@@ -134,6 +141,7 @@ class StudentsIndex extends Component
         }
 
         $this->resetForm();
+        $this->dispatch('student-form-saved');
         session()->flash('success', 'تم إنشاء ملف الطالب بنجاح.');
     }
 

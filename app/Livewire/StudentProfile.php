@@ -126,6 +126,9 @@ class StudentProfile extends Component
     {
         $this->removeProfilePhoto = false;
         $this->resetValidation('profilePhoto');
+        $this->validateOnly('profilePhoto', [
+            'profilePhoto' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+        ]);
     }
 
     public function removeProfilePhotoSelection(): void
@@ -178,7 +181,7 @@ class StudentProfile extends Component
             'profileContactPhone' => ['nullable', 'string', 'max:30'],
             'profileStatus' => ['required', Rule::enum(StudentStatus::class)],
             'profileNotes' => ['nullable', 'string', 'max:3000'],
-            'profilePhoto' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:3072'],
+            'profilePhoto' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
             'removeProfilePhoto' => ['boolean'],
             'profileIdentityDocument' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
         ]);
@@ -214,6 +217,7 @@ class StudentProfile extends Component
         }
 
         $this->reset('profilePhoto', 'profileIdentityDocument', 'removeProfilePhoto');
+        $this->dispatch('student-profile-saved');
         session()->flash('success', 'تم تحديث بيانات الطالب.');
     }
 

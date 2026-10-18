@@ -231,11 +231,11 @@
                                     <x-nav-icon name="bell" />
                                     <span x-cloak x-show="unreadNotifications > 0" x-text="Math.min(unreadNotifications, 99)" class="absolute right-1 top-1 grid min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[9px] font-black leading-4 text-white ring-2 ring-white"></span>
                                 </button>
-                                <div x-cloak x-show="notificationMenu" x-transition.origin.top.left class="absolute left-0 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/10">
-                                    <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3"><span class="font-extrabold text-slate-900">الإشعارات</span><span class="text-xs text-slate-400"><span x-text="unreadNotifications"></span> غير مقروء</span></div>
-                                    <div class="max-h-72 overflow-y-auto">
+                                <div x-cloak x-show="notificationMenu" x-transition.origin.top.left class="fixed inset-x-3 top-20 z-[70] mt-2 max-h-[calc(100dvh-6rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-950/10 sm:absolute sm:inset-x-auto sm:right-auto sm:left-0 sm:top-auto sm:z-auto sm:w-[min(22rem,calc(100vw-2rem))]">
+                                    <div class="flex min-w-0 items-center justify-between gap-3 border-b border-slate-100 px-4 py-3"><span class="font-extrabold text-slate-900">الإشعارات</span><span class="shrink-0 text-xs text-slate-400"><span x-text="unreadNotifications"></span> غير مقروء</span></div>
+                                    <div class="max-h-[calc(100dvh-12rem)] overflow-y-auto overscroll-contain sm:max-h-72">
                                         @forelse(auth()->user()->notifications()->latest()->limit(5)->get() as $notification)
-                                            <a href="{{ route('notifications.index') }}" class="block border-b border-slate-100 px-4 py-3 hover:bg-emerald-50/60"><p class="text-sm font-bold text-slate-800">{{ data_get($notification->data, 'title', 'إشعار جديد') }}</p><p class="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{{ data_get($notification->data, 'message') }}</p></a>
+                                            <a href="{{ route('notifications.index') }}" class="block min-w-0 border-b border-slate-100 px-4 py-3 hover:bg-emerald-50/60"><p class="break-words text-sm font-bold text-slate-800 [overflow-wrap:anywhere]">{{ data_get($notification->data, 'title', 'إشعار جديد') }}</p><p class="mt-1 line-clamp-3 break-words text-xs leading-5 text-slate-500 [overflow-wrap:anywhere]">{{ data_get($notification->data, 'message') }}</p></a>
                                         @empty
                                             <p class="px-4 py-8 text-center text-sm text-slate-400">لا توجد إشعارات بعد</p>
                                         @endforelse
@@ -268,11 +268,11 @@
 
             <main class="mx-auto max-w-[1600px] px-4 py-7 sm:px-6 lg:px-8 lg:py-9">
                 <x-flash-messages />
-                <div x-cloak x-show="realtimeNotification" x-transition:enter="transition duration-500 ease-out" x-transition:enter-start="translate-x-6 opacity-0" x-transition:leave="transition duration-250 ease-in" x-transition:leave-end="translate-x-5 opacity-0" class="feedback-alert fixed left-4 top-24 z-[84] w-[min(25rem,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-sky-200/80 bg-white shadow-[0_24px_70px_-35px_rgba(15,23,42,.35)]" role="status">
+                <div x-cloak x-show="realtimeNotification" x-transition:enter="transition duration-500 ease-out" x-transition:enter-start="translate-x-6 opacity-0" x-transition:leave="transition duration-250 ease-in" x-transition:leave-end="translate-x-5 opacity-0" class="feedback-alert fixed inset-x-3 top-24 z-[84] max-h-[calc(100dvh-7rem)] overflow-y-auto rounded-3xl border border-sky-200/80 bg-white shadow-[0_24px_70px_-35px_rgba(15,23,42,.35)] sm:right-auto sm:left-4 sm:w-[min(25rem,calc(100vw-2rem))]" role="status">
                     <span class="absolute inset-y-0 right-0 w-1.5 bg-sky-500"></span>
-                    <div class="flex items-start gap-3.5 p-4 pr-5">
-                        <span class="grid size-11 shrink-0 place-items-center rounded-2xl bg-sky-50 text-sky-700"><x-nav-icon name="bell" /></span>
-                        <div class="min-w-0 flex-1 pt-0.5"><p class="text-sm font-black text-slate-900" x-text="realtimeNotification?.title ?? 'إشعار جديد'"></p><p class="mt-1 text-xs font-medium leading-6 text-slate-600" x-text="realtimeNotification?.message"></p><a x-show="realtimeNotification?.url" :href="realtimeNotification?.url" class="mt-2 inline-flex text-xs font-black text-sky-700">فتح التفاصيل ←</a></div>
+                    <div class="flex items-start gap-2.5 p-3 pr-4 sm:gap-3.5 sm:p-4 sm:pr-5">
+                        <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-sky-50 text-sky-700 sm:size-11 sm:rounded-2xl"><x-nav-icon name="bell" /></span>
+                        <div class="min-w-0 flex-1 pt-0.5"><p class="break-words text-sm font-black text-slate-900 [overflow-wrap:anywhere]" x-text="realtimeNotification?.title ?? 'إشعار جديد'"></p><p class="mt-1 break-words text-xs font-medium leading-6 text-slate-600 [overflow-wrap:anywhere]" x-text="realtimeNotification?.message"></p><a x-show="realtimeNotification?.url" :href="realtimeNotification?.url" class="mt-2 inline-flex text-xs font-black text-sky-700">فتح التفاصيل ←</a></div>
                         <button type="button" @click="realtimeNotification = null" class="grid size-8 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-slate-100" aria-label="إغلاق التنبيه">×</button>
                     </div>
                 </div>

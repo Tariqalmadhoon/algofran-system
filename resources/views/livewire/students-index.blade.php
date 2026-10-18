@@ -40,7 +40,56 @@
                     <label><span class="form-label">تاريخ التسجيل</span><input wire:model="registrationDate" type="date" class="form-input"><x-input-error :messages="$errors->get('registrationDate')" /></label>
                     <label><span class="form-label">الحالة</span><select wire:model="status" class="form-input">@foreach($statuses as $studentStatus)<option value="{{ $studentStatus->value }}">{{ $studentStatus->label() }}</option>@endforeach</select><x-input-error :messages="$errors->get('status')" /></label>
                     <label><span class="form-label">{{ $teacherMode ? 'الحلقة المسندة إليك' : 'الحلقة الأولى' }}</span><select wire:model="halaqaId" class="form-input"><option value="">{{ $teacherMode ? 'اختر الحلقة' : 'دون حلقة حاليًا' }}</option>@foreach($halaqas as $halaqa)<option value="{{ $halaqa->id }}">{{ $halaqa->name }}</option>@endforeach</select><x-input-error :messages="$errors->get('halaqaId')" /></label>
-                    <label class="md:col-span-2 xl:col-span-1"><span class="form-label">الصورة الشخصية</span><span class="flex items-center gap-3 rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/50 p-3">@if($photo)<img src="{{ $photo->temporaryUrl() }}" alt="معاينة صورة الطالب" class="size-14 rounded-2xl object-cover">@else<span class="grid size-14 shrink-0 place-items-center rounded-2xl bg-emerald-100 text-xl font-black text-emerald-700">ص</span>@endif<span class="min-w-0 flex-1"><input wire:model="photo" type="file" accept="image/jpeg,image/png,image/webp" class="block w-full text-xs text-slate-500 file:ml-3 file:rounded-xl file:border-0 file:bg-white file:px-3 file:py-2 file:font-bold file:text-emerald-700"><small wire:loading wire:target="photo" class="mt-1 block font-bold text-emerald-700">جارٍ تجهيز الصورة…</small></span></span><x-input-error :messages="$errors->get('photo')" /></label>
+                    <label
+                        class="md:col-span-2 xl:col-span-1"
+                        x-data="{
+                            previewUrl: null,
+                            uploading: false,
+                            uploadFailed: false,
+                            progress: 0,
+                            selectPhoto(event) {
+                                this.clearPreview(false);
+                                const file = event.target.files?.[0];
+                                if (!file || !file.type.startsWith('image/')) return;
+                                this.previewUrl = URL.createObjectURL(file);
+                            },
+                            clearPreview(clearInput = true) {
+                                if (this.previewUrl) URL.revokeObjectURL(this.previewUrl);
+                                this.previewUrl = null;
+                                this.progress = 0;
+                                this.uploading = false;
+                                this.uploadFailed = false;
+                                if (clearInput && this.$refs.photoInput) this.$refs.photoInput.value = '';
+                            }
+                        }"
+                        x-on:student-form-saved.window="clearPreview()"
+                    >
+                        <span class="form-label">الصورة الشخصية</span>
+                        <span class="flex items-center gap-3 rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/50 p-3">
+                            <span class="relative grid size-14 shrink-0 place-items-center overflow-hidden rounded-2xl bg-emerald-100 text-xl font-black text-emerald-700">
+                                <span x-show="!previewUrl" aria-hidden="true">ص</span>
+                                <img x-cloak x-show="previewUrl" :src="previewUrl" alt="معاينة صورة الطالب" class="absolute inset-0 size-full object-cover">
+                            </span>
+                            <span class="min-w-0 flex-1">
+                                <input
+                                    x-ref="photoInput"
+                                    wire:model="photo"
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    class="block w-full text-xs text-slate-500 file:ml-3 file:rounded-xl file:border-0 file:bg-white file:px-3 file:py-2 file:font-bold file:text-emerald-700"
+                                    x-on:change="selectPhoto($event)"
+                                    x-on:livewire-upload-start="uploading = true; uploadFailed = false; progress = 0"
+                                    x-on:livewire-upload-progress="progress = $event.detail.progress"
+                                    x-on:livewire-upload-finish="uploading = false; progress = 100"
+                                    x-on:livewire-upload-error="uploading = false; uploadFailed = true"
+                                >
+                                <small x-cloak x-show="uploading" class="mt-1 block font-bold text-emerald-700" x-text="'جارٍ رفع الصورة… ' + progress + '%'"></small>
+                                <small x-cloak x-show="uploadFailed" class="mt-1 block font-bold text-rose-700">تعذّر رفع الصورة. اختر JPG أو PNG أو WEBP بحجم لا يتجاوز 5 ميجابايت.</small>
+                                <small x-show="!uploading && !uploadFailed" class="mt-1 block text-[11px] leading-5 text-slate-500">تظهر المعاينة فورًا، والحد الأقصى 5 ميجابايت.</small>
+                            </span>
+                        </span>
+                        <x-input-error :messages="$errors->get('photo')" />
+                    </label>
                     <label><span class="form-label">وثيقة الهوية الخاصة</span><input wire:model="identityDocument" type="file" accept=".pdf,image/*" class="form-input"><x-input-error :messages="$errors->get('identityDocument')" /></label>
                 </div>
                 <label><span class="form-label">ملاحظات</span><textarea wire:model="notes" rows="3" class="form-input"></textarea><x-input-error :messages="$errors->get('notes')" /></label>

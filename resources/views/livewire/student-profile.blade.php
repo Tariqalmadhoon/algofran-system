@@ -115,26 +115,49 @@
             <form x-show="tab === 'profile'" x-transition.opacity.duration.200ms wire:submit="saveProfile" class="space-y-5">
                 <div><p class="eyebrow">الملف الشخصي</p><h2 class="section-title">تحديث بيانات الطالب</h2><p class="page-subtitle">يمكنك تحديث الصورة والبيانات الأساسية من مكان واحد.</p></div>
 
-                <div class="rounded-3xl border border-dashed border-emerald-200 bg-gradient-to-l from-emerald-50/70 to-white p-4">
+                <div
+                    class="rounded-3xl border border-dashed border-emerald-200 bg-gradient-to-l from-emerald-50/70 to-white p-4"
+                    x-data="{
+                        previewUrl: null,
+                        uploading: false,
+                        uploadFailed: false,
+                        savedPhotoFailed: false,
+                        progress: 0,
+                        selectPhoto(event) {
+                            this.clearPreview(false);
+                            const file = event.target.files?.[0];
+                            if (!file || !file.type.startsWith('image/')) return;
+                            this.previewUrl = URL.createObjectURL(file);
+                        },
+                        clearPreview(clearInput = true) {
+                            if (this.previewUrl) URL.revokeObjectURL(this.previewUrl);
+                            this.previewUrl = null;
+                            this.progress = 0;
+                            this.uploading = false;
+                            this.uploadFailed = false;
+                            if (clearInput && this.$refs.profilePhotoInput) this.$refs.profilePhotoInput.value = '';
+                        }
+                    }"
+                    x-on:student-profile-saved.window="clearPreview(); savedPhotoFailed = false"
+                >
                     <div class="flex flex-col items-center gap-4 sm:flex-row">
-                        <div class="grid size-24 shrink-0 place-items-center overflow-hidden rounded-3xl bg-emerald-900 text-2xl font-black text-white shadow-lg">
-                            @if($profilePhoto)
-                                <img src="{{ $profilePhoto->temporaryUrl() }}" alt="معاينة صورة الطالب" class="size-full object-cover">
-                            @elseif(!$removeProfilePhoto && $studentPhotoUrl)
-                                <img src="{{ $studentPhotoUrl }}" alt="صورة {{ $student->full_name }}" class="size-full object-cover">
-                            @else
-                                {{ mb_substr($student->first_name, 0, 1) }}{{ mb_substr($student->family_name, 0, 1) }}
+                        <div class="relative grid size-24 shrink-0 place-items-center overflow-hidden rounded-3xl bg-emerald-900 text-2xl font-black text-white shadow-lg">
+                            <span aria-hidden="true">{{ mb_substr($student->first_name, 0, 1) }}{{ mb_substr($student->family_name, 0, 1) }}</span>
+                            @if(!$removeProfilePhoto && $studentPhotoUrl)
+                                <img x-cloak x-show="!previewUrl && !savedPhotoFailed" x-on:error="savedPhotoFailed = true" src="{{ $studentPhotoUrl }}" alt="صورة {{ $student->full_name }}" class="absolute inset-0 size-full object-cover">
                             @endif
+                            <img x-cloak x-show="previewUrl" :src="previewUrl" alt="معاينة صورة الطالب" class="absolute inset-0 size-full object-cover">
                         </div>
                         <div class="flex-1 text-center sm:text-right">
                             <p class="font-black text-slate-800">صورة الطالب الشخصية</p>
-                            <p class="mt-1 text-xs leading-6 text-slate-500">صورة مربعة من نوع JPG أو PNG أو WEBP، وبحجم أقصى 3 ميجابايت.</p>
+                            <p class="mt-1 text-xs leading-6 text-slate-500">صورة من نوع JPG أو PNG أو WEBP، وبحجم أقصى 5 ميجابايت. تظهر المعاينة فور اختيارها.</p>
                             <div class="mt-3 flex flex-wrap justify-center gap-2 sm:justify-start">
-                                <label class="btn-secondary cursor-pointer"><svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5"/></svg>{{ $studentPhotoUrl || $profilePhoto ? 'تغيير الصورة' : 'اختيار صورة' }}<input wire:model="profilePhoto" class="sr-only" type="file" accept="image/jpeg,image/png,image/webp"></label>
-                                @if(($studentPhotoUrl && !$removeProfilePhoto) || $profilePhoto)<button wire:click="removeProfilePhotoSelection" type="button" class="rounded-xl px-3 py-2 text-xs font-black text-rose-600 hover:bg-rose-50">إزالة الصورة</button>@endif
+                                <label class="btn-secondary cursor-pointer"><svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4m0 0L8 8m4-4 4 4M5 14v5h14v-5"/></svg>{{ $studentPhotoUrl || $profilePhoto ? 'تغيير الصورة' : 'اختيار صورة' }}<input x-ref="profilePhotoInput" wire:model="profilePhoto" class="sr-only" type="file" accept="image/jpeg,image/png,image/webp" x-on:change="selectPhoto($event)" x-on:livewire-upload-start="uploading = true; uploadFailed = false; progress = 0" x-on:livewire-upload-progress="progress = $event.detail.progress" x-on:livewire-upload-finish="uploading = false; progress = 100" x-on:livewire-upload-error="uploading = false; uploadFailed = true"></label>
+                                @if(($studentPhotoUrl && !$removeProfilePhoto) || $profilePhoto)<button wire:click="removeProfilePhotoSelection" x-on:click="clearPreview()" type="button" class="rounded-xl px-3 py-2 text-xs font-black text-rose-600 hover:bg-rose-50">إزالة الصورة</button>@endif
                                 @if($removeProfilePhoto && $studentPhotoUrl)<button wire:click="$set('removeProfilePhoto', false)" type="button" class="rounded-xl px-3 py-2 text-xs font-black text-emerald-700 hover:bg-emerald-50">تراجع</button>@endif
                             </div>
-                            <p wire:loading wire:target="profilePhoto" class="mt-2 text-xs font-bold text-emerald-700">جارٍ تجهيز المعاينة…</p>
+                            <p x-cloak x-show="uploading" class="mt-2 text-xs font-bold text-emerald-700" x-text="'جارٍ رفع الصورة… ' + progress + '%'"></p>
+                            <p x-cloak x-show="uploadFailed" class="mt-2 text-xs font-bold text-rose-700">تعذّر رفع الصورة. تحقق من النوع والحجم ثم حاول مجددًا.</p>
                             <x-input-error :messages="$errors->get('profilePhoto')" />
                         </div>
                     </div>

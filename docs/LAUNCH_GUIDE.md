@@ -53,7 +53,7 @@ bash deploy/deploy-shared.sh /home/ACCOUNT/domains/algofran-center.tech/alquran-
 
 الملف `.github/workflows/production.yml` جاهز لفحص Laravel وبناء الواجهات ثم نشر commit نفسه عبر SSH. الخطوة الأولى تحتاج نسخة مهيأة مسبقًا بالخادم.
 
-- متغيرا Repository: `PRODUCTION_BRANCH=gofran/T1` و`AUTO_DEPLOY_PRODUCTION=false`.
+- بعد دمج طلب السحب، متغيرا Repository: `PRODUCTION_BRANCH=main` و`AUTO_DEPLOY_PRODUCTION=false`.
 - Environment باسم `production`: `PRODUCTION_URL=https://algofran-center.tech` و`PRODUCTION_HOSTING_PROFILE=shared` أو `vps`.
 - الأسرار: SSH host/user/port/private key/known hosts، ومسار المشروع، ومسار public_html عند shared؛ أسماؤها كاملة في [PRODUCTION.md](PRODUCTION.md).
 - جرّب التشغيل اليدوي أولًا. بعد نجاح فحص النطاق والجوال فعّل `AUTO_DEPLOY_PRODUCTION=true` إن أردت النشر عقب كل push للفرع المعتمد.

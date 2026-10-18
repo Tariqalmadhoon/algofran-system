@@ -74,7 +74,7 @@ php artisan system:production-check --profile=shared --document-root=/absolute/p
 | الاسم | القيمة |
 | --- | --- |
 | `PRODUCTION_URL` | `https://algofran-center.tech` |
-| `PRODUCTION_BRANCH` | الفرع المعتمد؛ الفرع الحالي أثناء التجهيز هو `gofran/T1` |
+| `PRODUCTION_BRANCH` | فرع الإنتاج المعتمد؛ استخدم `main` بعد دمج طلب السحب |
 | `AUTO_DEPLOY_PRODUCTION` | اتركه `false` أولًا، واجعله `true` فقط بعد نجاح النشر اليدوي |
 | `PRODUCTION_HOSTING_PROFILE` | `shared` أو `vps` بحسب الباقة |
 
@@ -83,7 +83,7 @@ php artisan system:production-check --profile=shared --document-root=/absolute/p
 تهيئة نسخة الخادم لأول مرة عملية يدوية واحدة:
 
 ```bash
-git clone --branch gofran/T1 https://github.com/Tariqalmadhoon/algofran-system.git /var/www/alquran
+git clone --branch main https://github.com/Tariqalmadhoon/algofran-system.git /var/www/alquran
 cd /var/www/alquran
 cp .env.production.example .env
 composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
