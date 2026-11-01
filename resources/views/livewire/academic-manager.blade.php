@@ -1,4 +1,7 @@
-<div x-data="{ tab: 'enrollments' }" @academic:open-enrollments.window="tab = 'enrollments'" class="space-y-6">
+<div x-data="{ tab: 'enrollments' }"
+     @academic:open-enrollments.window="tab = 'enrollments'"
+     @academic:edit-achievement.window="tab = 'achievements'; $nextTick(() => document.getElementById('achievement-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))"
+     class="space-y-6">
     <section class="relative overflow-hidden rounded-[2rem] bg-[linear-gradient(125deg,#052e2b_0%,#047857_58%,#b88932_145%)] p-6 text-white shadow-[0_28px_80px_-45px_rgba(6,78,59,.8)] sm:p-8" data-motion="reveal">
         <div class="absolute -left-20 -top-24 size-64 rounded-full border border-white/10"></div>
         <div class="absolute -bottom-24 right-1/3 size-56 rounded-full bg-amber-300/10 blur-3xl"></div>
@@ -165,15 +168,58 @@
 
     @can('achievements.manage')
         <section x-show="tab === 'achievements'" x-cloak class="space-y-6">
-            <form wire:submit="saveAchievement" class="panel space-y-5"><div><p class="eyebrow">تكريم وتقدم</p><h2 class="section-title">تسجيل إنجاز يدوي</h2><p class="mt-1 text-sm text-slate-500">إنجازات إتمام الدورات تُضاف تلقائيًا عند اعتماد نتائجها، ويمكن هنا إضافة المسابقات والتكريمات الأخرى.</p></div><div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <label><span class="form-label">الطالب</span><select wire:model="achievementStudentId" class="form-input"><option value="">اختر الطالب</option>@foreach($students as $student)<option value="{{ $student->id }}">{{ $student->full_name }}</option>@endforeach</select><x-input-error :messages="$errors->get('achievementStudentId')" /></label>
-                <label><span class="form-label">النوع</span><select wire:model="achievementType" class="form-input">@foreach($achievementTypes as $type)<option value="{{ $type->value }}">{{ $type->label() }}</option>@endforeach</select></label>
-                <label><span class="form-label">العنوان</span><input wire:model="achievementTitle" class="form-input"><x-input-error :messages="$errors->get('achievementTitle')" /></label>
-                <label><span class="form-label">التاريخ</span><input wire:model="achievementDate" type="date" class="form-input"></label>
-                <label><span class="form-label">الجهة</span><input wire:model="achievementIssuer" class="form-input"></label>
-                <label class="md:col-span-2 xl:col-span-3"><span class="form-label">الوصف</span><textarea wire:model="achievementDescription" rows="2" class="form-input"></textarea></label>
-            </div><button class="btn-primary" type="submit">حفظ الإنجاز</button></form>
-            <section class="panel"><div class="mb-5"><h2 class="section-title">سجل الإنجازات</h2></div><div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">@forelse($achievements as $achievement)<article class="rounded-2xl border border-slate-100 p-4 transition hover:border-emerald-200"><div class="flex justify-between gap-2"><div class="flex items-center gap-3"><x-student-avatar :student="$achievement->student" size="sm" /><div><p class="font-black text-emerald-950">{{ $achievement->title }}</p><p class="mt-1 text-sm text-slate-500">{{ $achievement->student->full_name }}</p></div></div><span class="badge-active">{{ $achievement->type->label() }}</span></div><p class="mt-3 text-xs text-slate-400">{{ $achievement->achieved_at->format('Y-m-d') }} · {{ $achievement->issuer ?? '—' }}</p></article>@empty<p class="col-span-full py-8 text-center text-slate-400">لا توجد إنجازات بعد.</p>@endforelse</div></section>
+            <form id="achievement-form" wire:submit="saveAchievement" class="panel scroll-mt-24 space-y-5">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <p class="eyebrow">تكريم وتقدم</p>
+                        <h2 class="section-title">{{ $editingAchievementId !== '' ? 'تعديل الإنجاز' : 'تسجيل إنجاز يدوي' }}</h2>
+                        <p class="mt-1 text-sm text-slate-500">
+                            {{ $editingAchievementId !== '' ? 'راجع بيانات الإنجاز ثم احفظ التصحيح؛ سيُوثق التعديل في سجل التدقيق.' : 'إنجازات إتمام الدورات تُضاف تلقائيًا عند اعتماد نتائجها، ويمكن هنا إضافة المسابقات والتكريمات الأخرى.' }}
+                        </p>
+                    </div>
+                    @if($editingAchievementId !== '')
+                        <span class="w-fit rounded-full bg-amber-50 px-3 py-1.5 text-xs font-black text-amber-700">وضع التعديل</span>
+                    @endif
+                </div>
+
+                <x-input-error :messages="$errors->get('achievement')" />
+                <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <label><span class="form-label">الطالب</span><select wire:model="achievementStudentId" class="form-input"><option value="">اختر الطالب</option>@foreach($students as $student)<option value="{{ $student->id }}">{{ $student->full_name }}</option>@endforeach</select><x-input-error :messages="$errors->get('achievementStudentId')" /></label>
+                    <label><span class="form-label">النوع</span><select wire:model="achievementType" class="form-input">@foreach($achievementTypes as $type)<option value="{{ $type->value }}">{{ $type->label() }}</option>@endforeach</select></label>
+                    <label><span class="form-label">العنوان</span><input wire:model="achievementTitle" class="form-input"><x-input-error :messages="$errors->get('achievementTitle')" /></label>
+                    <label><span class="form-label">التاريخ</span><input wire:model="achievementDate" type="date" class="form-input"><x-input-error :messages="$errors->get('achievementDate')" /></label>
+                    <label><span class="form-label">الجهة</span><input wire:model="achievementIssuer" class="form-input"></label>
+                    <label class="md:col-span-2 xl:col-span-3"><span class="form-label">الوصف</span><textarea wire:model="achievementDescription" rows="2" class="form-input"></textarea></label>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button class="btn-primary" type="submit">{{ $editingAchievementId !== '' ? 'حفظ التعديلات' : 'حفظ الإنجاز' }}</button>
+                    @if($editingAchievementId !== '')
+                        <button class="btn-secondary" type="button" wire:click="cancelAchievementEdit">إلغاء التعديل</button>
+                    @endif
+                </div>
+            </form>
+
+            <section class="panel">
+                <div class="mb-5"><h2 class="section-title">سجل الإنجازات</h2><p class="mt-1 text-xs leading-6 text-slate-400">الإنجاز اليدوي قابل للتصحيح، أما الإنجاز التلقائي فيُصحح من سجل الحفظ أو نتيجة الدورة حفاظًا على اتساق البيانات.</p></div>
+                <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    @forelse($achievements as $achievement)
+                        <article wire:key="achievement-{{ $achievement->id }}" class="rounded-2xl border border-slate-100 p-4 transition hover:border-emerald-200">
+                            <div class="flex justify-between gap-2"><div class="flex min-w-0 items-center gap-3"><x-student-avatar :student="$achievement->student" size="sm" /><div class="min-w-0"><p class="truncate font-black text-emerald-950">{{ $achievement->title }}</p><p class="mt-1 truncate text-sm text-slate-500">{{ $achievement->student->full_name }}</p></div></div><span class="badge-active shrink-0">{{ $achievement->type->label() }}</span></div>
+                            @if($achievement->description)<p class="mt-3 line-clamp-2 text-xs leading-6 text-slate-500">{{ $achievement->description }}</p>@endif
+                            <div class="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
+                                <p class="text-xs text-slate-400">{{ $achievement->achieved_at->format('Y-m-d') }} · {{ $achievement->issuer ?? '—' }}</p>
+                                @if($achievement->fingerprint === null)
+                                    <button type="button" wire:click="editAchievement({{ $achievement->id }})" class="inline-flex items-center gap-1 rounded-xl bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700 transition hover:bg-emerald-100">تعديل</button>
+                                @else
+                                    <span class="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500">تلقائي</span>
+                                @endif
+                            </div>
+                        </article>
+                    @empty
+                        <p class="col-span-full py-8 text-center text-slate-400">لا توجد إنجازات بعد.</p>
+                    @endforelse
+                </div>
+            </section>
         </section>
     @endcan
 </div>

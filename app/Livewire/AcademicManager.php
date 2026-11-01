@@ -109,6 +109,8 @@ class AcademicManager extends Component
 
     public string $achievementIssuer = '';
 
+    public string $editingAchievementId = '';
+
     public function mount(): void
     {
         abort_unless(
@@ -375,7 +377,39 @@ class AcademicManager extends Component
         session()->flash('success', 'تم إصدار الشهادة وحفظ ملفها الخاص.');
     }
 
-    public function saveAchievement(AcademicRecordsService $academic): void
+    public function editAchievement(int $achievementId, StudentVisibilityService $visibility): void
+    {
+        Gate::authorize('achievements.manage');
+        $visibleStudentIds = $visibility->queryFor(auth()->user())->select('students.id');
+        $achievement = Achievement::query()
+            ->whereKey($achievementId)
+            ->whereIn('student_id', $visibleStudentIds)
+            ->firstOrFail();
+
+        if ($achievement->fingerprint !== null) {
+            $this->addError('achievement', 'هذا الإنجاز تلقائي؛ عدّل سجل الحفظ أو نتيجة الدورة التي أنشأته.');
+
+            return;
+        }
+
+        $this->editingAchievementId = (string) $achievement->id;
+        $this->achievementStudentId = (string) $achievement->student_id;
+        $this->achievementType = $achievement->type->value;
+        $this->achievementTitle = $achievement->title;
+        $this->achievementDescription = $achievement->description ?? '';
+        $this->achievementDate = $achievement->achieved_at->toDateString();
+        $this->achievementIssuer = $achievement->issuer ?? '';
+        $this->resetValidation();
+        $this->dispatch('academic:edit-achievement');
+    }
+
+    public function cancelAchievementEdit(): void
+    {
+        $this->resetAchievementForm();
+        $this->resetValidation();
+    }
+
+    public function saveAchievement(AcademicRecordsService $academic, StudentVisibilityService $visibility): void
     {
         Gate::authorize('achievements.manage');
         $data = $this->validate([
@@ -386,20 +420,31 @@ class AcademicManager extends Component
             'achievementDate' => ['required', 'date', 'before_or_equal:today'],
             'achievementIssuer' => ['nullable', 'string', 'max:255'],
         ]);
-        $student = Student::query()->findOrFail($data['achievementStudentId']);
-        Gate::authorize('view', $student);
-        $academic->recordAchievement($student, [
+        $student = $visibility->queryFor(auth()->user())->whereKey($data['achievementStudentId'])->firstOrFail();
+        $payload = [
             'type' => $data['achievementType'],
             'title' => $data['achievementTitle'],
             'description' => $data['achievementDescription'] ?: null,
             'achieved_at' => $data['achievementDate'],
             'issuer' => $data['achievementIssuer'] ?: null,
             'metadata' => null,
-        ], auth()->user());
-        $this->reset('achievementStudentId', 'achievementTitle', 'achievementDescription', 'achievementIssuer');
-        $this->achievementType = AchievementType::Manual->value;
-        $this->achievementDate = today()->toDateString();
-        session()->flash('success', 'تم تسجيل الإنجاز.');
+        ];
+
+        if ($this->editingAchievementId !== '') {
+            $visibleStudentIds = $visibility->queryFor(auth()->user())->select('students.id');
+            $achievement = Achievement::query()
+                ->whereKey($this->editingAchievementId)
+                ->whereIn('student_id', $visibleStudentIds)
+                ->firstOrFail();
+            $academic->updateAchievement($achievement, $student, $payload, auth()->user());
+            $message = 'تم تعديل الإنجاز وحفظ التصحيح في سجل التدقيق.';
+        } else {
+            $academic->recordAchievement($student, $payload, auth()->user());
+            $message = 'تم تسجيل الإنجاز.';
+        }
+
+        $this->resetAchievementForm();
+        session()->flash('success', $message);
     }
 
     public function render(StudentVisibilityService $visibility): View
@@ -527,5 +572,18 @@ class AcademicManager extends Component
             $result >= 60 => EvaluationRating::Good->label(),
             default => EvaluationRating::Poor->label(),
         };
+    }
+
+    private function resetAchievementForm(): void
+    {
+        $this->reset(
+            'editingAchievementId',
+            'achievementStudentId',
+            'achievementTitle',
+            'achievementDescription',
+            'achievementIssuer',
+        );
+        $this->achievementType = AchievementType::Manual->value;
+        $this->achievementDate = today()->toDateString();
     }
 }
