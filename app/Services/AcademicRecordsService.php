@@ -10,9 +10,11 @@ use App\Models\Certificate;
 use App\Models\Course;
 use App\Models\CourseEnrollment;
 use App\Models\Student;
+use App\Models\StudentTimelineEvent;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class AcademicRecordsService
 {
@@ -157,6 +159,57 @@ class AcademicRecordsService
             $this->auditLogger->record('achievement.created', $achievement, newValues: $achievement->getAttributes());
 
             return $achievement;
+        });
+    }
+
+    public function updateAchievement(Achievement $achievement, Student $student, array $data, User $actor): Achievement
+    {
+        if ($achievement->fingerprint !== null) {
+            throw ValidationException::withMessages([
+                'achievement' => 'هذا إنجاز تلقائي مرتبط بسجل الحفظ أو الدورة؛ صحّح السجل المصدر بدل تعديله مباشرة.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($achievement, $student, $data, $actor) {
+            $oldValues = $achievement->getAttributes();
+            $previousStudentId = (int) $achievement->student_id;
+
+            $achievement->fill([
+                ...$data,
+                'student_id' => $student->id,
+                'type' => AchievementType::from($data['type'])->value,
+            ])->save();
+
+            StudentTimelineEvent::query()
+                ->where('source_type', $achievement->getMorphClass())
+                ->where('source_id', $achievement->id)
+                ->where('event_type', 'achievement.recorded')
+                ->get()
+                ->each(fn (StudentTimelineEvent $event) => $event->update([
+                    'student_id' => $student->id,
+                    'description' => $achievement->title,
+                    'metadata' => ['type' => $achievement->type->value],
+                    'occurred_at' => $achievement->achieved_at,
+                ]));
+
+            $this->timeline->record(
+                $student,
+                'achievement.updated',
+                'تعديل إنجاز',
+                $achievement,
+                $achievement->title,
+                ['previous_student_id' => $previousStudentId, 'type' => $achievement->type->value],
+                $achievement->achieved_at,
+            );
+            $this->auditLogger->record(
+                'achievement.updated',
+                $achievement,
+                oldValues: $oldValues,
+                newValues: $achievement->getAttributes(),
+                actor: $actor,
+            );
+
+            return $achievement->refresh();
         });
     }
 }

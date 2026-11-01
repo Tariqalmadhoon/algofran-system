@@ -5,7 +5,9 @@ namespace Tests\Feature;
 use App\Actions\Students\CreateStudentAction;
 use App\Actions\Students\RecordInitialBaselineAction;
 use App\Enums\AlertStatus;
+use App\Livewire\AcademicManager;
 use App\Livewire\DashboardOverview;
+use App\Models\Achievement;
 use App\Models\Attendance;
 use App\Models\Branch;
 use App\Models\Center;
@@ -80,6 +82,8 @@ class PhaseThreeAcademicAnalyticsTest extends TestCase
 
     public function test_alert_engine_detects_risk_and_supports_resolution_workflow(): void
     {
+        $this->travelTo(now()->startOfMonth()->addDays(10));
+
         $manager = User::factory()->create();
         $manager->assignRole('center-manager');
         $this->actingAs($manager);
@@ -162,6 +166,73 @@ class PhaseThreeAcademicAnalyticsTest extends TestCase
         $this->assertDatabaseHas('student_timeline_events', ['student_id' => $student->id, 'event_type' => 'course.completed']);
         $this->assertDatabaseHas('student_timeline_events', ['student_id' => $student->id, 'event_type' => 'certificate.issued']);
         $this->get(route('private-files.show', $file))->assertOk();
+    }
+
+    public function test_authorized_manager_can_correct_a_manual_achievement_but_not_edit_an_automatic_one_directly(): void
+    {
+        $manager = User::factory()->create();
+        $manager->assignRole('super-admin');
+        $this->actingAs($manager);
+        [, , $halaqa] = $this->organization($manager);
+        $firstStudent = $this->student($manager, $halaqa, 'ACH-001');
+        $secondStudent = $this->student($manager, $halaqa, 'ACH-002');
+        $academic = app(AcademicRecordsService::class);
+        $achievement = $academic->recordAchievement($firstStudent, [
+            'type' => 'competition',
+            'title' => 'عنوان غير صحيح',
+            'description' => 'وصف قديم',
+            'achieved_at' => today()->subDay()->toDateString(),
+            'issuer' => 'جهة قديمة',
+            'metadata' => null,
+        ], $manager);
+
+        Livewire::actingAs($manager)
+            ->test(AcademicManager::class)
+            ->call('editAchievement', $achievement->id)
+            ->assertSet('editingAchievementId', (string) $achievement->id)
+            ->assertSet('achievementTitle', 'عنوان غير صحيح')
+            ->set('achievementStudentId', (string) $secondStudent->id)
+            ->set('achievementType', 'award')
+            ->set('achievementTitle', 'تكريم الطالب المتميز')
+            ->set('achievementDescription', 'تم تصحيح بيانات الإنجاز.')
+            ->set('achievementDate', today()->toDateString())
+            ->set('achievementIssuer', 'إدارة المركز')
+            ->call('saveAchievement')
+            ->assertHasNoErrors()
+            ->assertSet('editingAchievementId', '');
+
+        $this->assertDatabaseHas('achievements', [
+            'id' => $achievement->id,
+            'student_id' => $secondStudent->id,
+            'type' => 'award',
+            'title' => 'تكريم الطالب المتميز',
+            'issuer' => 'إدارة المركز',
+        ]);
+        $this->assertDatabaseHas('student_timeline_events', [
+            'student_id' => $secondStudent->id,
+            'event_type' => 'achievement.updated',
+            'source_id' => $achievement->id,
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'achievement.updated',
+            'auditable_id' => $achievement->id,
+            'user_id' => $manager->id,
+        ]);
+
+        $automatic = Achievement::query()->create([
+            'student_id' => $firstStudent->id,
+            'fingerprint' => 'test-automatic-achievement',
+            'type' => 'juz_completion',
+            'title' => 'إكمال جزء',
+            'achieved_at' => today(),
+            'created_by' => $manager->id,
+        ]);
+
+        Livewire::actingAs($manager)
+            ->test(AcademicManager::class)
+            ->call('editAchievement', $automatic->id)
+            ->assertHasErrors(['achievement'])
+            ->assertSet('editingAchievementId', '');
     }
 
     public function test_dashboard_uses_scoped_real_data_for_teacher(): void
